@@ -7,13 +7,13 @@ import Constants from 'expo-constants'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
 import { spacing, borderRadius } from '../../shared/design/spacing'
-import { Button, Input } from '../../shared/components'
+import { Button } from '../../shared/components'
 import { useAuthStore } from '../../features/auth/store/auth.store'
 import { profileService } from '../../features/profile/services/profile.service'
 import { authService } from '../../features/auth/services/auth.service'
 import { useThemeStore } from '../../shared/hooks/useThemeStore'
 import { useEntitlements } from '../../features/premium/hooks/useEntitlements'
-import { Crown, Settings, Shield, LogOut, ChevronRight, Camera, User, LogIn } from 'lucide-react-native'
+import { Crown, Settings, Shield, LogOut, ChevronRight, Camera, User } from 'lucide-react-native'
 import type { ThemeMode } from '../../shared/hooks/useThemeStore'
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0'
@@ -26,7 +26,6 @@ export default function ProfileScreen() {
   const { isPremium, expiresAt } = useEntitlements()
   const [name, setName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const isLoggedIn = !!session?.user?.id
@@ -40,15 +39,6 @@ export default function ProfileScreen() {
       if (p.avatar_url) setAvatarUrl(p.avatar_url)
     }).catch(() => {}).finally(() => setLoading(false))
   }, [session])
-
-  async function handleSave() {
-    if (!session?.user.id || !name.trim()) return
-    setSaving(true)
-    try {
-      await profileService.updateProfile(session.user.id, { name: name.trim() })
-      Alert.alert('Salvo!', 'Perfil atualizado.')
-    } catch { Alert.alert('Erro', 'Não foi possível salvar') } finally { setSaving(false) }
-  }
 
   async function handleAvatarPick() {
     if (!session?.user.id) return
@@ -102,10 +92,6 @@ export default function ProfileScreen() {
             <Text style={[styles.badgeText, { color: isPremium ? colors.accent.warning : colors.text.secondary }]}>
               {isPremium ? `Premium${expiresAt ? ` · até ${new Date(expiresAt).toLocaleDateString('pt-BR')}` : ''}` : 'Free'}
             </Text>
-          </View>
-          <View style={styles.section}>
-            <Input label="Nome" value={name} onChangeText={setName} placeholder="Seu nome" />
-            <Button title="Salvar" onPress={handleSave} loading={saving} disabled={saving} />
           </View>
         </View>
       ) : (

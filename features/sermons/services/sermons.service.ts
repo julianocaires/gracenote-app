@@ -12,12 +12,65 @@ export const sermonsService = {
     if (!premium && count >= 100) throw new Error('LIMIT_REACHED')
     const { data, error } = await supabase.from('sermons').insert({ user_id: userId, title: s.title, content: s.content, plain_text: s.plain_text, preacher: s.preacher ?? null, cover_id: s.cover_id ?? null }).select().single()
     if (error) throw error
-    if (s.category_ids?.length) await supabase.from('sermon_categories').insert(s.category_ids.map((c) => ({ sermon_id: data.id, category_id: c })))
-    if (s.tag_ids?.length) await supabase.from('sermon_tags').insert(s.tag_ids.map((t) => ({ sermon_id: data.id, tag_id: t })))
+    // Link categories
+    if (s.category_ids?.length) {
+      const catRows = s.category_ids.map((c) => ({ sermon_id: data.id, category_id: c }))
+      console.warn('[sermonsService] Inserting categories:', JSON.stringify(catRows))
+      const { error: catError } = await supabase.from('sermon_categories').insert(catRows)
+      if (catError) {
+        console.error('[sermonsService] Category insert FAILED:', catError.message, JSON.stringify(catError))
+        throw new Error('Erro ao salvar categorias: ' + catError.message)
+      }
+      console.warn('[sermonsService] Categories inserted successfully')
+    }
+    // Link tags
+    if (s.tag_ids?.length) {
+      const tagRows = s.tag_ids.map((t) => ({ sermon_id: data.id, tag_id: t }))
+      console.warn('[sermonsService] Inserting tags:', JSON.stringify(tagRows))
+      const { error: tagError } = await supabase.from('sermon_tags').insert(tagRows)
+      if (tagError) {
+        console.error('[sermonsService] Tag insert FAILED:', tagError.message, JSON.stringify(tagError))
+        throw new Error('Erro ao salvar tags: ' + tagError.message)
+      }
+      console.warn('[sermonsService] Tags inserted successfully')
+    }
     return data as Sermon
   },
-  update: async (id: string, u: SermonUpdate) => { const { data, error } = await supabase.from('sermons').update(u).eq('id', id).select().single(); if (error) throw error; return data as Sermon },
-  getById: async (id: string) => { const { data, error } = await supabase.from('sermons').select('*').eq('id', id).single(); if (error) throw error; return data as Sermon },
+  update: async (id: string, u: SermonUpdate) => {
+    // Separate sermon fields from junction fields (categories/tags are NOT columns on sermons table)
+    const { category_ids, tag_ids, ...sermonFields } = u
+    const { data, error } = await supabase.from('sermons').update(sermonFields).eq('id', id).select().single()
+    if (error) throw error
+    // Sync categories if provided
+    if (category_ids !== undefined) {
+      await supabase.from('sermon_categories').delete().eq('sermon_id', id)
+      if (category_ids.length > 0) {
+        const { error: catError } = await supabase.from('sermon_categories').insert(category_ids.map((c) => ({ sermon_id: id, category_id: c })))
+        if (catError) throw catError
+      }
+    }
+    // Sync tags if provided
+    if (tag_ids !== undefined) {
+      await supabase.from('sermon_tags').delete().eq('sermon_id', id)
+      if (tag_ids.length > 0) {
+        const { error: tagError } = await supabase.from('sermon_tags').insert(tag_ids.map((t) => ({ sermon_id: id, tag_id: t })))
+        if (tagError) throw tagError
+      }
+    }
+    return data as Sermon
+  },
+  getById: async (id: string) => {
+    const { data, error } = await supabase
+      .from('sermons')
+      .select(`
+        *,
+        categories:sermon_categories(category:categories(id, name, color)),
+        tags:sermon_tags(tag:tags(id, name))
+      `)
+      .eq('id', id).single()
+    if (error) throw error
+    return data as unknown as Sermon
+  },
   delete: async (id: string) => { const { error } = await supabase.from('sermons').delete().eq('id', id); if (error) throw error },
   getRecent: async (userId: string, limit = 5) => {
     const { data, error } = await supabase.from('sermons').select('*').eq('user_id', userId).eq('archived', false).order('created_at', { ascending: false }).limit(limit)

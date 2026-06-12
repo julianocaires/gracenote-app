@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import type { SearchFilters } from '../../library/types'
 
 const STORAGE_KEY = '@gracenote_local_sermons'
 
@@ -98,9 +99,65 @@ export const localStorageService = {
     return items.length
   },
 
+  search: async (filters: SearchFilters): Promise<LocalSermon[]> => {
+    const items = await getAllRaw()
+    const q = filters.query?.toLowerCase()
+
+    const filtered = items.filter((s) => {
+      // Text search: case-insensitive includes
+      if (q && q.length >= 2) {
+        if (!s.title.toLowerCase().includes(q) &&
+            !s.plain_text.toLowerCase().includes(q)) {
+          return false
+        }
+      }
+      // Preacher filter
+      if (filters.preacher && s.preacher !== filters.preacher) {
+        return false
+      }
+      // Favorite filter
+      if (filters.isFavorite && !s.is_favorite) {
+        return false
+      }
+      // Date range filter
+      if (filters.dateFrom && new Date(s.created_at) < new Date(filters.dateFrom)) {
+        return false
+      }
+      if (filters.dateTo && new Date(s.created_at) > new Date(filters.dateTo)) {
+        return false
+      }
+      return true
+    })
+
+    // Sort
+    const sortBy = filters.sortBy ?? 'created_at'
+    const sortOrder = filters.sortOrder ?? 'desc'
+    const dir = sortOrder === 'asc' ? 1 : -1
+
+    filtered.sort((a, b) => {
+      if (sortBy === 'title') {
+        return dir * a.title.localeCompare(b.title)
+      }
+      const aDate = new Date(
+        sortBy === 'updated_at' ? a.updated_at : a.created_at
+      ).getTime()
+      const bDate = new Date(
+        sortBy === 'updated_at' ? b.updated_at : b.created_at
+      ).getTime()
+      return dir * (aDate - bDate)
+    })
+
+    return filtered
+  },
+
+  getDistinctPreachers: async (): Promise<string[]> => {
+    const items = await getAllRaw()
+    return [...new Set(items.map((s) => s.preacher).filter(Boolean) as string[])]
+  },
+
   migrateToSupabase: async (userId: string): Promise<{ sermons: number }> => {
     const items = await getAllRaw()
-      const { sermonsService } = await import('./sermons.service')
+    const { sermonsService } = await import('./sermons.service')
     for (const item of items) {
       try {
         await sermonsService.create(userId, {

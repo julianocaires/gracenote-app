@@ -19,12 +19,21 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState<'google' | 'facebook' | null>(null)
   const [error, setError] = useState('')
+  const [emailSent, setEmailSent] = useState(false)
 
   async function handleRegister() {
     if (!name || !email || !password) { setError('Preencha todos os campos'); return }
     if (password.length < 6) { setError('Senha deve ter no mínimo 6 caracteres'); return }
     setLoading(true); setError('')
-    try { await signUp(email, password, name); router.replace('/(tabs)') } catch (e) { setError(e instanceof Error ? e.message : 'Erro ao criar conta') } finally { setLoading(false) }
+    try {
+      const data = await signUp(email, password, name)
+      if (data?.session) {
+        router.replace('/(tabs)')
+      } else {
+        // Email confirmation required
+        setEmailSent(true)
+      }
+    } catch (e) { setError(e instanceof Error ? e.message : 'Erro ao criar conta') } finally { setLoading(false) }
   }
 
   async function handleGoogle() {
@@ -41,8 +50,18 @@ export default function RegisterScreen() {
     <KeyboardAvoidingView style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + spacing.xl }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text.primary }]}>Criar conta</Text>
-        <Text style={[styles.subtitle, { color: colors.text.secondary }]}>Comece sua biblioteca espiritual</Text>
+        <Text style={[styles.subtitle, { color: colors.text.secondary }]}>{emailSent ? 'Confirme seu email' : 'Comece sua biblioteca espiritual'}</Text>
       </View>
+
+      {emailSent ? (
+        <View style={styles.emailSentContainer}>
+          <Text style={[styles.emailSentText, { color: colors.text.secondary }]}>
+            Enviamos um email de confirmação para <Text style={{ fontWeight: typography.fontWeight.bold, color: colors.text.primary }}>{email}</Text>.
+            {'\n\n'}Verifique sua caixa de entrada e clique no link para ativar sua conta.
+          </Text>
+          <Button title="Voltar ao login" onPress={() => router.push('/auth/login')} />
+        </View>
+      ) : (<>
       <View style={styles.socialSection}>
         <SocialButton title="Continuar com Google" icon={<GoogleIcon size={20} />} onPress={handleGoogle} loading={socialLoading === 'google'} />
         <SocialButton title="Continuar com Facebook" icon={<FacebookIcon size={20} />} onPress={handleFacebook} loading={socialLoading === 'facebook'} />
@@ -63,6 +82,7 @@ export default function RegisterScreen() {
         <Text style={[styles.footerText, { color: colors.text.secondary }]}>Já tem conta?</Text>
         <Button title="Entrar" onPress={() => router.push('/auth/login')} variant="ghost" />
       </View>
+      </>)}
     </KeyboardAvoidingView>
   )
 }
@@ -80,4 +100,6 @@ const styles = StyleSheet.create({
   error: { fontSize: typography.fontSize.sm, textAlign: 'center' },
   footer: { alignItems: 'center', marginTop: spacing['2xl'], gap: spacing.xs },
   footerText: { fontSize: typography.fontSize.sm },
+  emailSentContainer: { gap: spacing.lg, alignItems: 'center', paddingHorizontal: spacing.md },
+  emailSentText: { fontSize: typography.fontSize.base, textAlign: 'center', lineHeight: 24 },
 })

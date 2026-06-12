@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { View, Text, StyleSheet, FlatList, Alert } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
@@ -9,6 +10,7 @@ import { useTags, useCreateTag, useUpdateTag, useDeleteTag } from '../../feature
 
 export default function TagsScreen() {
   const { colors } = useTheme()
+  const insets = useSafeAreaInsets()
   const { data: tags, isLoading } = useTags()
   const createTag = useCreateTag()
   const updateTag = useUpdateTag()
@@ -32,7 +34,7 @@ export default function TagsScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}><Button title="Voltar" onPress={() => router.back()} variant="ghost" /><Text style={[styles.title, { color: colors.text.primary }]}>Tags</Text><Button title="Nova" onPress={openCreate} variant="ghost" /></View>
       {isLoading ? <LoadingScreen /> : tags && tags.length > 0 ? (
         <FlatList data={tags} keyExtractor={(i) => i.id} renderItem={({ item }) => (

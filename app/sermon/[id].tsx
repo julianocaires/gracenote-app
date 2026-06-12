@@ -51,6 +51,24 @@ export default function SermonDetailScreen() {
         )}
       </View>
 
+      {/* Categories */}
+      {(sermon as any).categories?.length > 0 && (
+        <View style={styles.chipRow}>
+          {(sermon as any).categories.map((c: any) => (
+            <Chip key={c.category.id} label={c.category.name} variant="selected" />
+          ))}
+        </View>
+      )}
+
+      {/* Tags */}
+      {(sermon as any).tags?.length > 0 && (
+        <View style={styles.chipRow}>
+          {(sermon as any).tags.map((t: any) => (
+            <Chip key={t.tag.id} label={t.tag.name} variant="default" />
+          ))}
+        </View>
+      )}
+
       <Text style={[styles.title, { color: colors.text.primary }]}>{sermon.title}</Text>
       <Text style={[styles.body, { color: colors.text.primary }]}>{sermon.plain_text || ''}</Text>
     </ScrollView>
@@ -67,4 +85,5 @@ const styles = StyleSheet.create({
   metaText: { fontSize: typography.fontSize.sm },
   title: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold },
   body: { fontSize: typography.fontSize.base, lineHeight: typography.fontSize.base * 1.5 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
 })

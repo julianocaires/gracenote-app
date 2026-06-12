@@ -1,18 +1,11 @@
 import { useState } from 'react'
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native'
+import { ScrollView, View, Text, StyleSheet, TouchableOpacity, Alert, Image } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
 import { spacing, borderRadius } from '../../shared/design/spacing'
 import { Button } from '../../shared/components'
-import { Check, Shield, Palette, FileText, Sparkles, Infinity, ArrowLeft } from 'lucide-react-native'
-
-// Plan identifiers for future RevenueCat integration
-const PLANS = {
-  monthly: { identifier: 'premium_monthly', price: 'R$ 9,90', periodLabel: 'mês' },
-  annual: { identifier: 'premium_annual', price: 'R$ 79,90', periodLabel: 'ano' },
-} as const
+import { Check, Shield, Palette, FileText, Sparkles, Infinity } from 'lucide-react-native'
 
 const BENEFITS = [
   { icon: Shield, title: 'Remoção de anúncios', desc: 'Experiência limpa e sem interrupções.' },
@@ -22,7 +15,7 @@ const BENEFITS = [
   { icon: FileText, title: 'Exportação em PDF', desc: 'Transforme ministrações em documentos elegantes e personalizados.' },
 ]
 
-export default function PremiumScreen() {
+export default function PremiumTabScreen() {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const [selected, setSelected] = useState<'monthly' | 'annual'>('annual')
@@ -31,23 +24,16 @@ export default function PremiumScreen() {
   async function handlePurchase() {
     setPurchasing(true)
     try {
-      // TODO: Integrar com RevenueCat
-      // const purchased = await revenuecatService.purchase(PLANS[selected].identifier)
-      // if (!purchased) throw new Error('Pagamento não concluído')
       Alert.alert('Bem-vindo ao Premium!', 'Em breve você poderá assinar diretamente pela loja do seu dispositivo.')
-      router.back()
     } catch { Alert.alert('Erro', 'Compra não processada.') } finally { setPurchasing(false) }
   }
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.lg }]}>
-      {/* Back button */}
-      <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
-        <ArrowLeft size={20} color={colors.text.secondary} />
-        <Text style={[styles.backText, { color: colors.text.secondary }]}>Voltar</Text>
-      </TouchableOpacity>
-
-      {/* Hero with app icon + Premium badge */}
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.lg }]}
+    >
+      {/* Hero */}
       <View style={styles.hero}>
         <View style={styles.logoWrap}>
           <Image
@@ -65,7 +51,8 @@ export default function PremiumScreen() {
         </Text>
       </View>
 
-      <View style={styles.benefitsSection}>
+      {/* Benefits */}
+      <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Todos os benefícios</Text>
         {BENEFITS.map((b) => (
           <View key={b.title} style={styles.benefitRow}>
@@ -80,7 +67,8 @@ export default function PremiumScreen() {
         ))}
       </View>
 
-      <View style={styles.plansSection}>
+      {/* Plans */}
+      <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Escolha seu plano</Text>
 
         {/* Annual Plan */}
@@ -140,6 +128,7 @@ export default function PremiumScreen() {
 
       <Button title="Assinar Premium" onPress={handlePurchase} loading={purchasing} disabled={purchasing} />
 
+      {/* Footer */}
       <View style={styles.footer}>
         <Text style={[styles.disclaimer, { color: colors.text.tertiary }]}>
           Pagamento cobrado na sua conta da loja. Assinatura renovada automaticamente, cancele quando quiser.
@@ -156,15 +145,6 @@ export default function PremiumScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.lg, gap: spacing['2xl'] },
-  backBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    alignSelf: 'flex-start',
-  },
-  backText: {
-    fontSize: typography.fontSize.base,
-  },
   hero: { alignItems: 'center', gap: spacing.md, paddingTop: spacing.md },
   logoWrap: { position: 'relative', marginBottom: spacing.sm },
   logo: { width: 88, height: 88, borderRadius: 22 },
@@ -183,14 +163,13 @@ const styles = StyleSheet.create({
   },
   heroTitle: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold, textAlign: 'center' },
   heroDesc: { fontSize: typography.fontSize.sm, textAlign: 'center', lineHeight: 20 },
+  section: { gap: spacing.md },
   sectionTitle: { fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold },
-  benefitsSection: { gap: spacing.md },
   benefitRow: { flexDirection: 'row', gap: spacing.md },
   benefitIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   benefitText: { flex: 1, gap: 2 },
   benefitTitle: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
   benefitDesc: { fontSize: typography.fontSize.sm, lineHeight: 18 },
-  plansSection: { gap: spacing.md },
   planWrapper: { gap: spacing.xs },
   badgeRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingRight: spacing.sm, marginBottom: -10, zIndex: 1 },
   badge: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: borderRadius.sm, borderWidth: 1 },

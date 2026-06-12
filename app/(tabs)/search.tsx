@@ -1,34 +1,219 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { View, Text, StyleSheet, FlatList } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
 import { spacing } from '../../shared/design/spacing'
-import { Input, EmptyState } from '../../shared/components'
+import { Input, EmptyState, LoadingScreen } from '../../shared/components'
 import { SermonCard } from '../../features/sermons/components/SermonCard'
-import { useSearch } from '../../features/library/hooks/useSearch'
 import { useUpdateSermon } from '../../features/sermons/hooks/useSermons'
+import { useSearch } from '../../features/library/hooks/useSearch'
+import { useCategories } from '../../features/categories/hooks/useCategories'
+import { useTags } from '../../features/tags/hooks/useTags'
+import { useSearchFilters } from '../../features/library/hooks/useSearchFilters'
+import { FilterBar } from '../../features/library/components/FilterBar'
+import { ActiveFiltersBar } from '../../features/library/components/ActiveFiltersBar'
+import { SortPicker } from '../../features/library/components/SortPicker'
+import { PreacherPicker } from '../../features/library/components/PreacherPicker'
+import { DateRangePicker } from '../../features/library/components/DateRangePicker'
+import { CategoryPicker } from '../../features/categories/components/CategoryPicker'
+import { TagPicker } from '../../features/tags/components/TagPicker'
+import { Search } from 'lucide-react-native'
+import type { SearchFilters } from '../../features/library/types'
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })
+}
 
 export default function SearchScreen() {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
-  const [query, setQuery] = useState('')
-  const { data: results } = useSearch(query)
   const updateSermon = useUpdateSermon()
-  async function handleFav(id: string, cur: boolean) { await updateSermon.mutateAsync({ id, data: { is_favorite: !cur } }) }
+  const { data: categories } = useCategories()
+  const { data: tags } = useTags()
+
+  // Filter state
+  const {
+    filters,
+    setQuery,
+    toggleCategory,
+    toggleTag,
+    toggleFavorite,
+    setPreacher,
+    setDateRange,
+    setSort,
+    clearFilters,
+    clearFilter,
+    activeFilters,
+    activeFilterCount,
+  } = useSearchFilters()
+
+  // Debounced query
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleQueryChange = useCallback(
+    (text: string) => {
+      setQuery(text)
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+      debounceTimer.current = setTimeout(() => {
+        setDebouncedQuery(text)
+      }, 300)
+    },
+    [setQuery],
+  )
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current)
+    }
+  }, [])
+
+  // Picker visibility
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false)
+  const [showTagPicker, setShowTagPicker] = useState(false)
+  const [showPreacherPicker, setShowPreacherPicker] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showSortPicker, setShowSortPicker] = useState(false)
+
+  // Build search filters for the query
+  const searchFilters: SearchFilters = {
+    ...filters,
+    query: debouncedQuery || undefined,
+  }
+  const hasActiveFilters = activeFilterCount > 0
+  const { data: results, isLoading } = useSearch(searchFilters)
+
+  async function handleFav(id: string, cur: boolean) {
+    await updateSermon.mutateAsync({ id, data: { is_favorite: !cur } })
+  }
+
+  const hasSearched = debouncedQuery.length >= 2 || hasActiveFilters
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={styles.header}><Text style={[styles.title, { color: colors.text.primary }]}>Buscar</Text></View>
-      <View style={styles.inputWrapper}><Input value={query} onChangeText={setQuery} placeholder="Buscar ministrações..." /></View>
-      {query.length < 2 ? <EmptyState title="Digite para buscar" description="Busque pelo título ou conteúdo das ministrações." />
-      : results && results.length > 0 ? (
-        <FlatList data={results} keyExtractor={(i: any) => i.id} renderItem={({ item }: { item: any }) => (
-          <SermonCard title={item.title} subtitle={new Date(item.created_at).toLocaleDateString('pt-BR')} isFavorite={item.is_favorite} onPress={() => router.push(`/sermon/${item.id}` as any)} onFavoritePress={() => handleFav(item.id, item.is_favorite)} />
-        )} contentContainerStyle={styles.list} ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />} />
-      ) : <EmptyState title="Nenhum resultado" description="Tente buscar por outro termo." />}
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text.primary }]}>Buscar</Text>
+      </View>
+
+      {/* Search Input */}
+      <View style={styles.inputWrapper}>
+        <Input
+          value={filters.query ?? ''}
+          onChangeText={handleQueryChange}
+          placeholder="Busque pelo título, conteúdo, pregador..."
+        />
+      </View>
+
+      {/* Filter Bar */}
+      <FilterBar
+        activeFilterCount={activeFilterCount}
+        hasCategoryFilter={(filters.categoryIds?.length ?? 0) > 0}
+        hasTagFilter={(filters.tagIds?.length ?? 0) > 0}
+        hasPreacherFilter={!!filters.preacher}
+        hasDateFilter={!!filters.dateFrom || !!filters.dateTo}
+        hasFavoriteFilter={!!filters.isFavorite}
+        onCategoryPress={() => setShowCategoryPicker(true)}
+        onTagPress={() => setShowTagPicker(true)}
+        onPreacherPress={() => setShowPreacherPicker(true)}
+        onDatePress={() => setShowDatePicker(true)}
+        onSortPress={() => setShowSortPicker(true)}
+        onFavoritePress={toggleFavorite}
+      />
+
+      {/* Active Filters */}
+      <ActiveFiltersBar
+        filters={activeFilters}
+        onRemove={clearFilter}
+        onClearAll={clearFilters}
+      />
+
+      {/* Results */}
+      {isLoading ? (
+        <LoadingScreen />
+      ) : hasSearched ? (
+        results && results.length > 0 ? (
+          <FlatList
+            data={results}
+            keyExtractor={(i: any) => i.id}
+            renderItem={({ item }: { item: any }) => (
+              <SermonCard
+                title={item.title}
+                subtitle={formatDate(item.created_at)}
+                categoryName={item.categories?.[0]?.category?.name}
+                isFavorite={item.is_favorite}
+                onPress={() => router.push(`/sermon/${item.id}` as any)}
+                onFavoritePress={() => handleFav(item.id, item.is_favorite)}
+              />
+            )}
+            contentContainerStyle={styles.list}
+            ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
+          />
+        ) : (
+          <EmptyState
+            title="Nenhum resultado encontrado"
+            description="Tente ajustar os filtros ou buscar por outro termo."
+          />
+        )
+      ) : (
+        <EmptyState
+          icon={<Search size={48} stroke={colors.text.tertiary} />}
+          title="O que você deseja encontrar?"
+          description="Digite um termo ou use os filtros para buscar em suas ministrações."
+        />
+      )}
+
+      {/* Picker Modals */}
+      <CategoryPicker
+        visible={showCategoryPicker}
+        onClose={() => setShowCategoryPicker(false)}
+        selectedIds={filters.categoryIds ?? []}
+        onSelect={(id) => {
+          const name = categories?.find((c) => c.id === id)?.name ?? id
+          toggleCategory(id, name)
+        }}
+      />
+      <TagPicker
+        visible={showTagPicker}
+        onClose={() => setShowTagPicker(false)}
+        selectedIds={filters.tagIds ?? []}
+        onSelect={(id) => {
+          const name = tags?.find((t) => t.id === id)?.name ?? id
+          toggleTag(id, name)
+        }}
+      />
+      <PreacherPicker
+        visible={showPreacherPicker}
+        onClose={() => setShowPreacherPicker(false)}
+        selectedPreacher={filters.preacher}
+        onSelect={setPreacher}
+      />
+      <DateRangePicker
+        visible={showDatePicker}
+        onClose={() => setShowDatePicker(false)}
+        dateFrom={filters.dateFrom ?? null}
+        dateTo={filters.dateTo ?? null}
+        onSelect={setDateRange}
+      />
+      <SortPicker
+        visible={showSortPicker}
+        onClose={() => setShowSortPicker(false)}
+        currentSort={{
+          sortBy: filters.sortBy ?? 'created_at',
+          sortOrder: filters.sortOrder ?? 'desc',
+        }}
+        onSelect={setSort}
+      />
     </View>
   )
 }
-const styles = StyleSheet.create({ container: { flex: 1 }, header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm }, title: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold }, inputWrapper: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm }, list: { padding: spacing.md } })
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  title: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold },
+  inputWrapper: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
+  list: { padding: spacing.md },
+})

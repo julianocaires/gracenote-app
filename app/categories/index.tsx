@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { View, Text, StyleSheet, FlatList, Alert } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
@@ -9,6 +10,7 @@ import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory 
 
 export default function CategoriesScreen() {
   const { colors } = useTheme()
+  const insets = useSafeAreaInsets()
   const { data: categories, isLoading } = useCategories()
   const createCategory = useCreateCategory()
   const updateCategory = useUpdateCategory()
@@ -33,7 +35,7 @@ export default function CategoriesScreen() {
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.header}><Button title="Voltar" onPress={() => router.back()} variant="ghost" /><Text style={[styles.title, { color: colors.text.primary }]}>Categorias</Text><Button title="Nova" onPress={openCreate} variant="ghost" /></View>
       {isLoading ? <LoadingScreen /> : categories && categories.length > 0 ? (
         <FlatList data={categories} keyExtractor={(i) => i.id} renderItem={({ item }) => (
