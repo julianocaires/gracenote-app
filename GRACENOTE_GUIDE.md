@@ -36,13 +36,14 @@
 ```
 gracenote-app/
 ├── app/                    # Expo Router (file-based routing)
-│   ├── _layout.tsx         # Root layout (Stack navigator + onboarding check)
-│   ├── (tabs)/             # Tab Navigator (bottom tabs)
+│   ├── _layout.tsx         # Root layout (Stack navigator + onboarding + auth)
+│   ├── (tabs)/             # Tab Navigator (5 itens no bottom tabs)
 │   │   ├── _layout.tsx
 │   │   ├── index.tsx       # Dashboard / Home
-│   │   ├── search.tsx      # Search screen
-│   │   ├── favorites.tsx   # Favorites screen
-│   │   └── profile.tsx     # Profile & Settings
+│   │   ├── search.tsx      # Search screen com filtros avançados
+│   │   ├── create-button.tsx  # Botão "+" vazio (navega via tabBarButton)
+│   │   ├── premium.tsx     # Premium inline na tab
+│   │   └── profile.tsx     # Profile & avatar
 │   ├── auth/               # Authentication screens
 │   │   ├── login.tsx
 │   │   ├── register.tsx
@@ -51,10 +52,10 @@ gracenote-app/
 │   ├── onboarding/         # 4-step onboarding carousel
 │   ├── sermon/             # Sermon CRUD
 │   │   ├── create.tsx
-│   │   ├── [id].tsx        # Detail view
+│   │   ├── [id].tsx        # Detail view (com categorias/tags)
 │   │   └── edit/[id].tsx
-│   ├── premium/            # Premium/Paywall screen
-│   └── settings/           # App settings & privacy
+│   ├── premium/            # Premium/Paywall screen (standalone)
+│   └── settings/           # Perfil + Configurações do app
 ├── features/               # Feature modules
 │   ├── auth/               # Auth hooks, services, store
 │   ├── sermons/            # Sermon CRUD + localStorage service
@@ -62,11 +63,11 @@ gracenote-app/
 │   ├── tags/               # Tag management
 │   ├── covers/             # Cover picker
 │   ├── editor/             # Font + Color pickers
-│   ├── premium/            # Entitlements, RevenueCat
+│   ├── premium/            # Entitlements, RevenueCat (mock)
 │   ├── profile/            # Profile service
-│   └── library/            # Search + favorites hooks
+│   └── library/            # Search + filters + hooks
 ├── shared/                 # Shared code
-│   ├── components/         # UI components (Button, Input, Modal, etc.)
+│   ├── components/         # UI components (Button, Input, Modal, Chip, etc.)
 │   ├── design/             # Design tokens (colors, typography, spacing)
 │   ├── hooks/              # Shared hooks (useTheme, useThemeStore)
 │   ├── i18n/               # Internationalization (pt, en)
@@ -132,17 +133,20 @@ const insets = useSafeAreaInsets()
 - `gestureEnabled: true` e `fullScreenGestureEnabled: true` para swipe-to-go-back
 - Não exige autenticação — app abre direto no dashboard
 - Redireciona para onboarding apenas na primeira execução
+- **Gerencia sessão**: `getSession()` na inicialização + `onAuthStateChange` global
 
 ### Tab Layout (`app/(tabs)/_layout.tsx`)
-4 abas: Início, Buscar, Favoritos, Perfil
+5 abas: Início, Buscar, [+], Premium, Perfil
+
+O botão "+" central é customizado: círculo com fundo `colors.accent.primary`, navega para `/sermon/create`.
 
 ### Fluxo de telas:
 ```
 Onboarding → Tabs (qualquer aba sem login)
 Login/Registro → Tabs
-Sermão(+) → Create → Save → Back
+[+] → Create → Save → Back
 Sermão [id] → Detail → Edit → Save → Back
-Perfil → Configurações / Privacidade
+Perfil → Configurações (avatar + nome)
 ```
 
 ---
@@ -151,8 +155,35 @@ Perfil → Configurações / Privacidade
 
 ### Email/Senha (funciona 100%)
 - `useAuth()` hook → `signIn(email, password)`, `signUp(email, password, name)`
+- **IMPORTANTE**: `signUp`, `signIn` e `signOut` devem SEMPRE persistir na store Zustand:
+  ```ts
+  useAuthStore.getState().setSession(data.session)
+  useAuthStore.getState().setLoading(false)
+  ```
 - Sessão persiste via AsyncStorage (configurado em `shared/services/supabase.ts`)
 - `supabase.auth.setSession()` após OAuth
+
+### Sessão — Root Layout
+O `onAuthStateChange` DEVE ficar no root layout (`app/_layout.tsx`), não em hooks de tela:
+```ts
+// app/_layout.tsx
+const setSession = useAuthStore((s) => s.setSession)
+const setLoading = useAuthStore((s) => s.setLoading)
+
+useEffect(() => {
+  authService.getSession().then((s) => { setSession(s); setLoading(false) })
+  const { data: subscription } = authService.onAuthStateChange((session) => setSession(session as any))
+  return () => subscription?.subscription.unsubscribe()
+}, [])
+```
+
+### Email Confirmation
+Se o Supabase tem confirmação de email ativada (padrão), `signUp` retorna `session: null`. O register screen deve verificar:
+```ts
+const data = await signUp(email, password, name)
+if (data?.session) router.replace('/(tabs)')
+else setEmailSent(true) // Mostra mensagem "Confirme seu email"
+```
 
 ### Google / Facebook (parcial)
 - Implementado via `expo-auth-session` + `expo-web-browser`
@@ -189,6 +220,7 @@ O app funciona **com ou sem login**:
 - `features/sermons/hooks/useSermons.ts` detecta `isOnline()` e usa o repositório correto
 - `features/sermons/services/localStorage.service.ts` — CRUD completo em AsyncStorage
 - Dados locais podem ser migrados para nuvem via `localStorageService.migrateToSupabase(userId)`
+- Busca offline: `localStorageService.search(filters)` — filtra em memória (case-insensitive, data, preacher, favoritos)
 
 **Estrutura do sermão local:**
 ```ts
@@ -227,26 +259,76 @@ Quando o usuário não está logado, o dashboard mostra:
 - Continuar lendo (última ministração atualizada)
 - Neste dia (registros de anos anteriores na mesma data)
 - Estatísticas rápidas (total de ministrações, categorias)
-- Banner offline + FAB "+"
+- Banner offline
+
+### Busca com Filtros (`app/(tabs)/search.tsx`)
+- Campo de texto com **debounce de 300ms**
+- **FilterBar horizontal**: Categorias, Tags, Pregador, Favoritos, Data, Ordenar
+- **Filtros disponíveis**:
+  - Texto: busca em título + conteúdo (ILIKE)
+  - Categoria: multi-select com AND logic
+  - Tags: multi-select com AND logic
+  - Pregador: select único
+  - Favoritos: toggle
+  - Data: opções rápidas (Este mês, 30 dias, Este ano) + personalizado
+  - Ordenação: 5 opções (recentes, antigas, A-Z, Z-A, última leitura)
+- **ActiveFiltersBar**: chips removíveis mostrando filtros ativos
+- **Dual-storage**: busca online (Supabase) + offline (AsyncStorage)
+- **Empty states**: pré-busca ("O que deseja encontrar?") vs sem resultados
 
 ### Editor de Ministração
-- Toolbar com: Fonte, Cor, Destacar, Capa (apenas botões funcionais)
-- Fonte e cor são aplicadas visualmente no `TextInput` via `style`
-- Fontes gratuitas: Clássica, Moderna, Serifada, Elegante, Minimalista
-- Fontes premium: Lettering, Manuscrita, Caligrafia, Brush, Assinatura (bloqueadas para free)
-- Cores de texto: 9 cores + 6 cores de marca-texto
-- Categorias e tags associadas via modais
+
+**Layout:**
+1. **Capa** (antes do título) — área touchable com preview
+2. **Título**
+3. **Pregador**
+4. **Categoria + Tags** (botões lado a lado)
+5. **Toolbar**: Fonte, Cor, Destacar
+6. **Editor** (TextInput multiline, flex para ocupar espaço)
+
+**Toolbar:**
+- **Fonte**: abre FontSelector com preview via `fontFamily`
+- **Cor** (`mode='text'`): altera `color` do TextInput
+- **Destacar** (`mode='highlight'`): altera `backgroundColor` do TextInput
+
+**Fontes:**
+- Gratuitas: Clássica, Moderna, Serifada, Elegante, Minimalista
+- Premium: Lettering, Manuscrita, Caligrafia, Brush, Assinatura (bloqueadas para free)
+- Preview funciona com `fontFamily: f.fontFamily` + fontes carregadas via `expo-font`
+
+**Cores:**
+- Texto: 9 cores (Padrão, Vermelho, Laranja, Âmbar, Verde, Azul, Roxo, Rosa, Cinza)
+- Marca-texto: 6 cores (Amarelo, Verde, Azul, Rosa, Laranja, Roxo)
+
+**CoverPicker:**
+- Aba "Modelos": capas gradientes built-in
+- Aba "Câmera": solicita permissão, tira foto
+- Aba "Galeria": solicita permissão, seleciona foto
+
+### Alerta ao sair sem salvar
+- **Create e Edit**: `handleBack()` no botão Voltar
+- **Android**: `BackHandler.addEventListener('hardwareBackPress', ...)` intercepta botão físico
+- **NUNCA** usar `navigation.addListener('beforeRemove')` — não funciona com native-stack
+- `isDirty` monitora: title, content, preacher, capa, categorias, tags, fonte, cor, highlight
 
 ### Perfil
 - Funciona com ou sem login
-- Com login: avatar, nome, email, badge Premium/Free, salvar, sair
-- Sem login: "Conectar-se" com opções de criar conta ou entrar
-- Sempre visível: tema (claro/escuro/sistema), configurações, política de privacidade, versão
+- **Com login**: avatar (clicável para trocar foto), nome, email, badge Premium/Free, tema
+- **Sem login**: "Conectar-se" com opções de criar conta ou entrar
+- Menu: Configurações, Política de Privacidade, Sair
+
+### Configurações (`app/settings/index.tsx`)
+- **Perfil** (só visível logado): avatar + nome
+- Aparência: Idioma
+- Notificações: toggle
+- Dados: Backup automático
 
 ### Premium
-- 6 benefícios: biblioteca ilimitada, sem anúncios, fontes premium, capas premium, exportação PDF, selo premium
-- Planos: Mensal R$ 9,90 / Anual R$ 79,90
-- Implementação mock (RevenueCat integrado mas não ativo)
+- Acesso via tab bar (ícone Crown) ou pelo `/premium`
+- Logo oficial GraceNote + selo "PREMIUM"
+- 5 benefícios: Remoção de anúncios, Ministrações ilimitadas, Recursos premium no editor, Capas exclusivas, Exportação em PDF
+- Planos: Mensal R$ 9,90 (selo "Popular") / Anual R$ 79,90 (selo "Economia")
+- Implementação mock (RevenueCat integrado mas não ativo — preparado para conexão real)
 
 ---
 
@@ -263,7 +345,21 @@ Quando o usuário não está logado, o dashboard mostra:
 - `covers` — id, url, is_premium, is_builtin, user_id
 
 ### RLS Policies
-Executar `supabase/migrations/001_rls_categories_tags.sql` no SQL Editor do Supabase para ativar as policies de categories e tags.
+Executar TODAS as migrations em ordem no SQL Editor do Supabase:
+
+1. `001_rls_categories_tags.sql` — RLS para `categories` e `tags`
+2. `002_full_setup.sql` — colunas `preacher` + `last_opened_at`, índices
+3. `003_search_indexes.sql` — `tsvector` + GIN index para full-text search (OPCIONAL)
+4. `004_storage_rls.sql` — RLS para buckets `avatars` e `covers`
+5. `005_rls_junction_tables.sql` — RLS para `sermon_categories` e `sermon_tags` (OBRIGATÓRIO)
+
+**Regra de ouro para RLS:**
+- `FOR ALL USING (...)` NÃO cobre INSERT. INSERT precisa de `WITH CHECK`.
+- Sempre criar 4 políticas separadas: SELECT, INSERT (WITH CHECK), UPDATE (USING + WITH CHECK), DELETE (USING).
+
+### Storage Buckets
+- `avatars` — fotos de perfil (público, upsert)
+- `covers` — capas de ministrações (público)
 
 ### Auth Providers
 - **Google:** Ativar em Authentication → Providers. URI de redirecionamento: `gracenote://auth/callback`
@@ -271,23 +367,48 @@ Executar `supabase/migrations/001_rls_categories_tags.sql` no SQL Editor do Supa
 
 ---
 
-## Configuração do Projeto
+## Padrões de Código
 
-### Instalação
-```powershell
-cd gracenote-app
-npm install
-npx expo start
+### JOINs do Supabase em `select`
+```ts
+// ❌ ERRADO: select('*') não inclui relações
+const { data } = await supabase.from('sermons').select('*')
+
+// ✅ CORRETO: select explícito com joins
+const { data } = await supabase.from('sermons').select(`
+  *,
+  categories:sermon_categories(category:categories(id, name, color)),
+  tags:sermon_tags(tag:tags(id, name))
+`)
 ```
 
-### Expo Go (teste rápido)
-- SDK 54 compatível com Expo Go
-- Escanear QR Code com iPhone ou Android
-- Login social requer configuração OAuth no Supabase
+### Atualização com categorias/tags
+```ts
+// Separar campos do sermão dos campos de junção
+update: async (id, u) => {
+  const { category_ids, tag_ids, ...sermonFields } = u
+  // Update na tabela sermons (só campos do sermão)
+  const { data, error } = await supabase.from('sermons').update(sermonFields).eq('id', id)
+  // Sync categories
+  if (category_ids !== undefined) {
+    await supabase.from('sermon_categories').delete().eq('sermon_id', id)
+    if (category_ids.length > 0) {
+      await supabase.from('sermon_categories').insert(category_ids.map(c => ({ sermon_id: id, category_id: c })))
+    }
+  }
+  // Sync tags (mesmo padrão)
+}
+```
 
-### EAS Build (APK/IPA)
-```powershell
-npx eas build --profile development --platform android
+### Category/Tag Picker — Display
+**NUNCA** renderizar chips com IDs diretamente:
+```tsx
+// ❌ ERRADO: mostra ID do Supabase
+categoryIds.map(id => <Chip label={id} />)
+
+// ✅ CORRETO: mostra nome (populado via estado ou lookup)
+// Ou simplesmente não mostra chips — apenas os botões "Categoria (N)" indicam seleção
+<Button title={`Categoria${categoryIds.length > 0 ? ` (${categoryIds.length})` : ''}`} />
 ```
 
 ---
@@ -320,12 +441,16 @@ npx eas build --profile development --platform android
 - Modificar `supabase.ts` sem entender o dual-storage
 - Usar `require()` em vez de `import`
 - Ignorar warnings do Metro — investigar ou documentar
+- Usar `navigation.addListener('beforeRemove')` — causa erro com native-stack
+- Esquecer de separar `category_ids`/`tag_ids` do update da tabela `sermons`
 
 ### Problemas conhecidos:
 1. **Login Google:** Funciona apenas com URI de redirecionamento `gracenote://auth/callback` configurado corretamente no Supabase e Google Cloud Console
-2. **Categorias/Tags:** Requer RLS policies executadas no Supabase (ver migration)
-3. **react-native-reanimated warning:** "shared value's .value inside reanimated inline style" — causado pelo react-native-screens, inofensivo, atenuado com babel.config.js
+2. **Categorias/Tags:** Requer RLS policies executadas no Supabase (ver migration 005)
+3. **react-native-reanimated warning:** "shared value's .value inside reanimated inline style" — causado pelo react-native-screens, inofensivo, suprimido via LogBox
 4. **Fontes:** As fontes Inter, Merriweather, Caveat são nomes de sistema/bundle — podem não renderizar em todos os dispositivos sem carregamento explícito via expo-font
+5. **Salvar com categorias/tags:** Se der erro "Could not find the 'category_ids' column of 'sermons'", é porque `category_ids`/`tag_ids` estão sendo passados para o `update()` da tabela `sermons`. Separar os campos (ver padrão acima).
+6. **Swipar para voltar do editor:** O `beforeRemove` não funciona com native-stack. Usar `BackHandler` para Android + botão Voltar na tela.
 
 ---
 
@@ -333,7 +458,7 @@ npx eas build --profile development --platform android
 
 - [ ] npm install
 - [ ] npx expo start --clear (testar no Expo Go)
-- [ ] Executar migrations no Supabase SQL Editor
+- [ ] Executar migrations no Supabase SQL Editor (001 a 005)
 - [ ] Configurar Google OAuth no Supabase
 - [ ] Configurar Facebook OAuth no Supabase
 - [ ] Rodar `npx tsc --noEmit` (0 erros)
