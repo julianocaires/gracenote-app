@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { View, Text, StyleSheet, FlatList } from 'react-native'
+import { View, Text, StyleSheet, FlatList, Alert } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
@@ -7,7 +7,7 @@ import { typography } from '../../shared/design/typography'
 import { spacing } from '../../shared/design/spacing'
 import { Input, EmptyState, LoadingScreen } from '../../shared/components'
 import { SermonCard } from '../../features/sermons/components/SermonCard'
-import { useUpdateSermon } from '../../features/sermons/hooks/useSermons'
+import { useUpdateSermon, useDeleteSermon } from '../../features/sermons/hooks/useSermons'
 import { useSearch } from '../../features/library/hooks/useSearch'
 import { useCategories } from '../../features/categories/hooks/useCategories'
 import { useTags } from '../../features/tags/hooks/useTags'
@@ -84,8 +84,31 @@ export default function SearchScreen() {
   const hasActiveFilters = activeFilterCount > 0
   const { data: results, isLoading } = useSearch(searchFilters)
 
+  const deleteSermon = useDeleteSermon()
+
   async function handleFav(id: string, cur: boolean) {
     await updateSermon.mutateAsync({ id, data: { is_favorite: !cur } })
+  }
+
+  function handleLongPress(item: any) {
+    Alert.alert(item.title, '', [
+      { text: 'Editar', onPress: () => router.push(`/sermon/edit/${item.id}` as any) },
+      { text: 'Apagar', style: 'destructive', onPress: () => confirmDelete(item) },
+      { text: 'Cancelar', style: 'cancel' },
+    ])
+  }
+
+  function confirmDelete(item: any) {
+    Alert.alert('Apagar ministração?', `"${item.title}" será apagada permanentemente.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Apagar', style: 'destructive', onPress: async () => {
+        try {
+          await deleteSermon.mutateAsync(item.id)
+        } catch (err) {
+          Alert.alert('Erro', 'Não foi possível apagar.')
+        }
+      }},
+    ])
   }
 
   return (
@@ -146,6 +169,7 @@ export default function SearchScreen() {
                 isFavorite={item.is_favorite}
                 onPress={() => router.push(`/sermon/${item.id}` as any)}
                 onFavoritePress={() => handleFav(item.id, item.is_favorite)}
+                onLongPress={() => handleLongPress(item)}
               />
             </View>
           )}

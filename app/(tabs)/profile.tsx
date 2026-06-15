@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import * as ImagePicker from 'expo-image-picker'
 import { router } from 'expo-router'
 import Constants from 'expo-constants'
 import { useTheme } from '../../shared/hooks/useTheme'
@@ -13,7 +12,7 @@ import { profileService } from '../../features/profile/services/profile.service'
 import { authService } from '../../features/auth/services/auth.service'
 import { useThemeStore } from '../../shared/hooks/useThemeStore'
 import { useEntitlements } from '../../features/premium/hooks/useEntitlements'
-import { Crown, Settings, Shield, LogOut, ChevronRight, Camera, User } from 'lucide-react-native'
+import { Crown, Settings, Shield, LogOut, ChevronRight, User } from 'lucide-react-native'
 import type { ThemeMode } from '../../shared/hooks/useThemeStore'
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0'
@@ -40,19 +39,6 @@ export default function ProfileScreen() {
     }).catch(() => {}).finally(() => setLoading(false))
   }, [session])
 
-  async function handleAvatarPick() {
-    if (!session?.user.id) return
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 })
-    if (result.canceled) return
-    const uri = result.assets[0].uri
-    try {
-      const url = await profileService.uploadAvatar(session.user.id, uri)
-      await profileService.updateProfile(session.user.id, { avatar_url: url })
-      setAvatarUrl(url)
-      Alert.alert('Pronto!', 'Foto atualizada.')
-    } catch { Alert.alert('Erro', 'Não foi possível atualizar a foto') }
-  }
-
   async function handleThemeChange(newMode: ThemeMode) {
     setMode(newMode)
     if (!session?.user.id) return
@@ -73,7 +59,7 @@ export default function ProfileScreen() {
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing['4xl'] }]}>
       {isLoggedIn ? (
         <View style={styles.avatarSection}>
-          <TouchableOpacity onPress={handleAvatarPick} style={styles.avatarWrap}>
+          <View style={styles.avatarWrap}>
             {avatarUrl ? (
               <Image source={{ uri: avatarUrl }} style={[styles.avatar, { borderColor: colors.border }]} />
             ) : (
@@ -81,10 +67,7 @@ export default function ProfileScreen() {
                 <User size={32} color={colors.text.tertiary} />
               </View>
             )}
-            <View style={[styles.cameraBadge, { backgroundColor: colors.accent.primary }]}>
-              <Camera size={12} color={colors.text.inverse} />
-            </View>
-          </TouchableOpacity>
+          </View>
           <Text style={[styles.name, { color: colors.text.primary }]}>{name || 'Sem nome'}</Text>
           <Text style={[styles.email, { color: colors.text.tertiary }]}>{session?.user.email}</Text>
           <View style={[styles.badge, { backgroundColor: isPremium ? colors.accent.warning + '20' : colors.skeleton, borderColor: isPremium ? colors.accent.warning + '40' : colors.border }]}>
@@ -152,7 +135,6 @@ const styles = StyleSheet.create({
   avatarWrap: { position: 'relative' },
   avatar: { width: 80, height: 80, borderRadius: 40, borderWidth: 2 },
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  cameraBadge: { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   name: { fontSize: typography.fontSize.xl, fontWeight: typography.fontWeight.bold },
   email: { fontSize: typography.fontSize.sm },
   badge: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm + 4, paddingVertical: spacing.xs, borderRadius: borderRadius.full, borderWidth: 1 },

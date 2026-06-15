@@ -15,9 +15,10 @@ interface SermonCardProps {
   isFavorite: boolean
   onPress: () => void
   onFavoritePress: () => void
+  onLongPress?: () => void
 }
 
-export function SermonCard({ title, subtitle, coverUrl, coverId, isFavorite, onPress, onFavoritePress }: SermonCardProps) {
+export function SermonCard({ title, subtitle, coverUrl, coverId, isFavorite, onPress, onFavoritePress, onLongPress }: SermonCardProps) {
   const { colors } = useTheme()
   const [imgError, setImgError] = useState(false)
 
@@ -55,7 +56,7 @@ export function SermonCard({ title, subtitle, coverUrl, coverId, isFavorite, onP
   }
 
   return (
-    <TouchableOpacity style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, shadows.sm]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }, shadows.sm]} onPress={onPress} onLongPress={onLongPress} activeOpacity={0.7}>
       <View style={styles.coverWrap}>
         {renderCover()}
         <TouchableOpacity onPress={onFavoritePress} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} style={styles.favBtn}>

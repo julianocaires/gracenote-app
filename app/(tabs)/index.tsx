@@ -9,7 +9,7 @@ import { MiniSermonCard } from '../../features/sermons/components/MiniSermonCard
 import { SermonCard } from '../../features/sermons/components/SermonCard'
 import { useDashboardData, useUpdateSermon } from '../../features/sermons/hooks/useSermons'
 import { useCategories } from '../../features/categories/hooks/useCategories'
-import { Plus, BookOpen, BarChart3, Clock, Sparkles, CloudOff } from 'lucide-react-native'
+import { BookOpen, BarChart3, Clock, Sparkles, CloudOff } from 'lucide-react-native'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -37,7 +37,7 @@ export default function HomeScreen() {
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 100 }]}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing['4xl'] }]}
       refreshControl={<RefreshControl refreshing={isLoading} onRefresh={() => {}} tintColor={colors.accent.primary} />}
     >
       <View style={styles.greetingRow}>
@@ -46,7 +46,7 @@ export default function HomeScreen() {
             {greeting.text}{profile?.name ? `, ${profile.name}` : ''} {greeting.icon}
           </Text>
           <Text style={[styles.subtitle, { color: colors.text.secondary }]}>
-            {stats.sermonCount} ministração{stats.sermonCount !== 1 ? 'ões' : ''} registrada{stats.sermonCount !== 1 ? 's' : ''}
+            {stats.sermonCount} {stats.sermonCount !== 1 ? 'ministrações' : 'ministração'} registrada{stats.sermonCount !== 1 ? 's' : ''}
           </Text>
         </View>
         <TouchableOpacity
@@ -62,6 +62,27 @@ export default function HomeScreen() {
           <CloudOff size={14} color={colors.accent.warning} />
           <Text style={[styles.offlineBannerText, { color: colors.accent.warning }]}>Dados salvos apenas localmente. Conecte-se para sincronizar.</Text>
         </TouchableOpacity>
+      )}
+
+      {onThisDay.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Sparkles size={16} color={colors.accent.warning} />
+            <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Neste dia</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
+            {onThisDay.map((s: any) => (
+              <MiniSermonCard
+                key={s.id}
+                title={s.title}
+                date={`Há ${new Date().getFullYear() - new Date(s.created_at).getFullYear()} anos`}
+                coverUrl={s.cover?.url}
+                coverId={s.cover_id}
+                onPress={() => router.push(`/sermon/${s.id}` as any)}
+              />
+            ))}
+          </ScrollView>
+        </View>
       )}
 
       {recentSermons.length > 0 ? (
@@ -102,27 +123,6 @@ export default function HomeScreen() {
         </View>
       )}
 
-      {onThisDay.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Sparkles size={16} color={colors.accent.warning} />
-            <Text style={[styles.sectionTitle, { color: colors.text.primary }]}>Neste dia</Text>
-          </View>
-          {onThisDay.map((s: any) => (
-            <SermonCard
-              key={s.id}
-              title={s.title}
-              subtitle={`Há ${new Date().getFullYear() - new Date(s.created_at).getFullYear()} anos — ${formatDate(s.created_at)}`}
-              coverUrl={s.cover?.url}
-              coverId={s.cover_id}
-              isFavorite={s.is_favorite}
-              onPress={() => router.push(`/sermon/${s.id}` as any)}
-              onFavoritePress={() => handleFav(s.id, s.is_favorite)}
-            />
-          ))}
-        </View>
-      )}
-
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <BarChart3 size={16} color={colors.accent.primary} />
@@ -138,26 +138,19 @@ export default function HomeScreen() {
             <Text style={[styles.statLabel, { color: colors.text.secondary }]}>Categorias</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: colors.accent.success }]}>0</Text>
+            <Text style={[styles.statNumber, { color: colors.accent.success }]}>{stats.preacherCount}</Text>
             <Text style={[styles.statLabel, { color: colors.text.secondary }]}>Pregadores</Text>
           </View>
         </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.accent.primary }]}
-        onPress={() => router.push('/sermon/create' as any)}
-        activeOpacity={0.8}
-      >
-        <Plus size={24} color={colors.text.inverse} />
-      </TouchableOpacity>
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: 100, gap: spacing['2xl'] },
+  content: { padding: spacing.lg, paddingBottom: spacing['4xl'], gap: spacing['2xl'] },
   greetingRow: { gap: spacing.md },
   greeting: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold },
   subtitle: { fontSize: typography.fontSize.sm, marginTop: 2 },
@@ -171,7 +164,6 @@ const styles = StyleSheet.create({
   statCard: { flex: 1, borderRadius: borderRadius.md, borderWidth: 1, padding: spacing.md, alignItems: 'center', gap: spacing.xs },
   statNumber: { fontSize: typography.fontSize['2xl'], fontWeight: typography.fontWeight.bold },
   statLabel: { fontSize: typography.fontSize.xs, textAlign: 'center' },
-  fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg, width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', elevation: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.2, shadowRadius: 6 },
   offlineBanner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.sm + 4, borderRadius: borderRadius.md, borderWidth: 1 },
   offlineBannerText: { fontSize: typography.fontSize.xs, flex: 1 },
 })

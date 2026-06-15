@@ -25,8 +25,6 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (!isLoggedIn) return
-    const user = session!.user
-    setAvatarUrl(user.user_metadata?.avatar_url ?? null)
     profileService.getProfile(session!.user.id).then((p) => {
       setName(p.name)
       if (p.avatar_url) setAvatarUrl(p.avatar_url)

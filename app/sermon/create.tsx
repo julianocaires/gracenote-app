@@ -1,7 +1,8 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ScrollView, TextInput, BackHandler, Image as RNImage } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { router } from 'expo-router'
+import { router, useNavigation } from 'expo-router'
+import { usePreventRemove } from '@react-navigation/native'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
 import { spacing, borderRadius } from '../../shared/design/spacing'
@@ -47,6 +48,20 @@ export default function CreateSermonScreen() {
 
   const isDirty = !!title || !!content || !!preacher || !!selectedCover || categoryIds.length > 0 || tagIds.length > 0 || selectedFont.id !== getDefaultFont().id || textColor !== '#2C2420' || !!highlightColor
 
+  // Prevent swipe-back gesture on iOS when there are unsaved changes
+  const navigation = useNavigation()
+  const savingRef = useRef(false)
+  usePreventRemove(isDirty, ({ data }) => {
+    if (savingRef.current) {
+      navigation.dispatch(data.action)
+      return
+    }
+    Alert.alert('Descartar alterações?', 'Você tem alterações que ainda não foram salvas.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Descartar', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ])
+  })
+
   function handleBack() {
     if (isDirty) {
       Alert.alert('Descartar alterações?', 'Você tem alterações que ainda não foram salvas.', [
@@ -73,6 +88,7 @@ export default function CreateSermonScreen() {
 
   async function handleCreate() {
     if (!title.trim()) { Alert.alert('Título obrigatório', 'Dê um título à ministração'); return }
+    savingRef.current = true
     try {
       const result = await createSermon.mutateAsync({
         title: title.trim(),

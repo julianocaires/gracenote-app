@@ -129,7 +129,9 @@ export function useDashboardData() {
     queryFn: () => profileService.getProfile(u!),
     enabled: !!u,
   })
-  const stats = { sermonCount: allSermons.data?.length ?? 0 }
+  const allSermonsData = allSermons.data ?? []
+  const preacherCount = new Set(allSermonsData.map((s: any) => s.preacher).filter(Boolean)).size
+  const stats = { sermonCount: allSermonsData.length, preacherCount }
   return {
     recentSermons: recent.data ?? [],
     continueReading: continueReading.data,
