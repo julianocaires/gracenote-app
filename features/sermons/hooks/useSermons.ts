@@ -48,7 +48,7 @@ export function useCreateSermon() {
         textColor: (d.content as any)?.textColor,
       }) as any
     },
-    onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon-limit'] }) },
+    onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon-limit'] }); q.invalidateQueries({ queryKey: ['search'] }) },
   })
 }
 
@@ -68,7 +68,7 @@ export function useUpdateSermon() {
         textColor: (data.content as any)?.textColor,
       }) as any
     },
-    onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon'] }) },
+    onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon'] }); q.invalidateQueries({ queryKey: ['search'] }) },
   })
 }
 
@@ -80,7 +80,7 @@ export function useDeleteSermon() {
       if (online) return sermonsService.delete(id)
       return localStorageService.delete(id)
     },
-    onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon-limit'] }) },
+    onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon-limit'] }); q.invalidateQueries({ queryKey: ['search'] }) },
   })
 }
 

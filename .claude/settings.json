@@ -9,5 +9,8 @@
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
     "CLAUDE_CODE_SUBAGENT_MODEL": "deepseek-v4-flash[1m]",
     "CLAUDE_CODE_EFFORT_LEVEL": "max"
+  },
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true
   }
 }

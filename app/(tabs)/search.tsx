@@ -19,7 +19,6 @@ import { PreacherPicker } from '../../features/library/components/PreacherPicker
 import { DateRangePicker } from '../../features/library/components/DateRangePicker'
 import { CategoryPicker } from '../../features/categories/components/CategoryPicker'
 import { TagPicker } from '../../features/tags/components/TagPicker'
-import { Search } from 'lucide-react-native'
 import type { SearchFilters } from '../../features/library/types'
 
 function formatDate(iso: string) {
@@ -89,8 +88,6 @@ export default function SearchScreen() {
     await updateSermon.mutateAsync({ id, data: { is_favorite: !cur } })
   }
 
-  const hasSearched = debouncedQuery.length >= 2 || hasActiveFilters
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
       {/* Header */}
@@ -130,38 +127,34 @@ export default function SearchScreen() {
         onClearAll={clearFilters}
       />
 
-      {/* Results */}
+      {/* Results — sempre mostra todas as ministrações, afunilando com filtros */}
       {isLoading ? (
         <LoadingScreen />
-      ) : hasSearched ? (
-        results && results.length > 0 ? (
-          <FlatList
-            data={results}
-            keyExtractor={(i: any) => i.id}
-            renderItem={({ item }: { item: any }) => (
+      ) : results && results.length > 0 ? (
+        <FlatList
+          data={results}
+          keyExtractor={(i: any) => i.id}
+          numColumns={2}
+          columnWrapperStyle={{ gap: spacing.md }}
+          renderItem={({ item }: { item: any }) => (
+            <View style={{ marginBottom: spacing.md, flex: 1 }}>
               <SermonCard
                 title={item.title}
                 subtitle={formatDate(item.created_at)}
-                categoryName={item.categories?.[0]?.category?.name}
+                coverUrl={item.cover?.url}
+                coverId={item.cover_id}
                 isFavorite={item.is_favorite}
                 onPress={() => router.push(`/sermon/${item.id}` as any)}
                 onFavoritePress={() => handleFav(item.id, item.is_favorite)}
               />
-            )}
-            contentContainerStyle={styles.list}
-            ItemSeparatorComponent={() => <View style={{ height: spacing.md }} />}
-          />
-        ) : (
-          <EmptyState
-            title="Nenhum resultado encontrado"
-            description="Tente ajustar os filtros ou buscar por outro termo."
-          />
-        )
+            </View>
+          )}
+          contentContainerStyle={styles.list}
+        />
       ) : (
         <EmptyState
-          icon={<Search size={48} stroke={colors.text.tertiary} />}
-          title="O que você deseja encontrar?"
-          description="Digite um termo ou use os filtros para buscar em suas ministrações."
+          title={hasActiveFilters ? 'Nenhum resultado encontrado' : 'Nenhuma ministração ainda'}
+          description={hasActiveFilters ? 'Tente ajustar os filtros ou buscar por outro termo.' : 'Crie sua primeira ministração para começar.'}
         />
       )}
 

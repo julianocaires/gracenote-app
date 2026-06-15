@@ -72,7 +72,7 @@ export default function HomeScreen() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
             {recentSermons.map((s: any) => (
-              <MiniSermonCard key={s.id} title={s.title} date={formatDate(s.created_at)} onPress={() => router.push(`/sermon/${s.id}` as any)} />
+              <MiniSermonCard key={s.id} title={s.title} date={formatDate(s.created_at)} coverUrl={s.cover?.url} coverId={s.cover_id} onPress={() => router.push(`/sermon/${s.id}` as any)} />
             ))}
           </ScrollView>
         </View>
@@ -93,6 +93,8 @@ export default function HomeScreen() {
           <SermonCard
             title={continueReading.title}
             subtitle={formatDate(continueReading.created_at)}
+            coverUrl={continueReading.cover?.url}
+            coverId={continueReading.cover_id}
             isFavorite={continueReading.is_favorite}
             onPress={() => router.push(`/sermon/${continueReading.id}` as any)}
             onFavoritePress={() => handleFav(continueReading.id, continueReading.is_favorite)}
@@ -111,6 +113,8 @@ export default function HomeScreen() {
               key={s.id}
               title={s.title}
               subtitle={`Há ${new Date().getFullYear() - new Date(s.created_at).getFullYear()} anos — ${formatDate(s.created_at)}`}
+              coverUrl={s.cover?.url}
+              coverId={s.cover_id}
               isFavorite={s.is_favorite}
               onPress={() => router.push(`/sermon/${s.id}` as any)}
               onFavoritePress={() => handleFav(s.id, s.is_favorite)}

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, Alert, Image } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, Alert, Image as RNImage } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
@@ -7,6 +7,7 @@ import { spacing, borderRadius } from '../../shared/design/spacing'
 import { Button, LoadingScreen, Chip } from '../../shared/components'
 import { useSermonDetail, useDeleteSermon, useUpdateSermon } from '../../features/sermons/hooks/useSermons'
 import { Calendar, User, BookOpen } from 'lucide-react-native'
+import { getBuiltinCoverColor, isBuiltinCover } from '../../features/covers/constants'
 
 export default function SermonDetailScreen() {
   const { colors } = useTheme()
@@ -37,6 +38,18 @@ export default function SermonDetailScreen() {
           <Button title="Excluir" onPress={handleDelete} variant="ghost" />
         </View>
       </View>
+
+      {/* Cover */}
+      {(sermon as any).cover?.url ? (
+        <RNImage
+          source={{ uri: (sermon as any).cover.url }}
+          style={styles.coverImage}
+          resizeMode="cover"
+          onError={(e) => console.warn('[SermonDetail] Cover image load error:', (sermon as any).cover.url, e.nativeEvent?.error)}
+        />
+      ) : isBuiltinCover((sermon as any).cover_id) ? (
+        <View style={[styles.coverImage, { backgroundColor: getBuiltinCoverColor((sermon as any).cover_id) || colors.skeleton }]} />
+      ) : null}
 
       <View style={styles.meta}>
         <View style={styles.metaRow}>
@@ -78,6 +91,7 @@ export default function SermonDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing['4xl'] },
+  coverImage: { width: '100%', height: 160, borderRadius: borderRadius.md },
   header: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: spacing.sm },
   headerActions: { flexDirection: 'row', gap: spacing.xs },
   meta: { flexDirection: 'row', gap: spacing.md, flexWrap: 'wrap' },

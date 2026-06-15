@@ -1,4 +1,5 @@
 import { supabase } from '../../../shared/services/supabase'
+import { coversService } from '../../../features/covers/services/covers.service'
 import type { Sermon } from '../../../shared/types'
 import type { SearchFilters } from '../types'
 
@@ -9,7 +10,8 @@ export const libraryService = {
       .select(`
         *,
         categories:sermon_categories(category:categories(id, name, color)),
-        tags:sermon_tags(tag:tags(id, name))
+        tags:sermon_tags(tag:tags(id, name)),
+        cover:covers(id, url, is_premium)
       `)
       .eq('user_id', userId)
       .eq('archived', false)
@@ -88,7 +90,7 @@ export const libraryService = {
 
     const { data, error } = await query
     if (error) throw error
-    return data as unknown as Sermon[]
+    return coversService.ensureSignedUrls(data as unknown as Sermon[])
   },
 
   getFavorites: async (userId: string) => {

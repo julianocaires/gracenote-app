@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, TextInput, BackHandler } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, TextInput, BackHandler, Image as RNImage } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useTheme } from '../../../shared/hooks/useTheme'
@@ -12,9 +12,10 @@ import { CoverPicker } from '../../../features/covers/components/CoverPicker'
 import { FontSelector, getDefaultFont } from '../../../features/editor/components/FontSelector'
 import { ColorPicker } from '../../../features/editor/components/ColorPicker'
 import { useSermonDetail, useUpdateSermon } from '../../../features/sermons/hooks/useSermons'
-import { Type, Palette, Highlighter, Image } from 'lucide-react-native'
+import { Type, Palette, Highlighter, Image as ImageIcon } from 'lucide-react-native'
 import type { Cover } from '../../../shared/types'
 import type { FontOption } from '../../../features/editor/components/FontSelector'
+import { getBuiltinCoverColor, isBuiltinCover } from '../../../features/covers/constants'
 
 export default function EditSermonScreen() {
   const { colors } = useTheme()
@@ -34,6 +35,7 @@ export default function EditSermonScreen() {
   const [showCategories, setShowCategories] = useState(false)
   const [showTags, setShowTags] = useState(false)
   const [showCovers, setShowCovers] = useState(false)
+  const [coverImgError, setCoverImgError] = useState(false)
   const [showFonts, setShowFonts] = useState(false)
   const [showColors, setShowColors] = useState(false)
   const [colorMode, setColorMode] = useState<'text' | 'highlight'>('text')
@@ -58,6 +60,12 @@ export default function EditSermonScreen() {
       if (s.tags?.length) {
         setTagIds(s.tags.map((t: any) => t.tag.id))
       }
+      // Load existing cover
+      if (s.cover) {
+        setSelectedCover({ id: s.cover.id, url: s.cover.url, is_premium: s.cover.is_premium, is_builtin: false, user_id: null, created_at: '' })
+      } else if (isBuiltinCover(s.cover_id)) {
+        setSelectedCover({ id: s.cover_id, url: '', is_premium: false, is_builtin: true, user_id: null, created_at: '' })
+      }
     }
   }, [sermon])
 
@@ -68,12 +76,15 @@ export default function EditSermonScreen() {
   const s = sermon as any
   const origCategoryIds: string[] = s?.categories?.map((c: any) => c.category.id) ?? []
   const origTagIds: string[] = s?.tags?.map((t: any) => t.tag.id) ?? []
+  // Determine original cover: uploaded covers have a URL (from join), built-in only have cover_id
+  const origCoverId = s?.cover?.id ?? s?.cover_id ?? null
+  const coverChanged = (selectedCover?.id ?? null) !== origCoverId
   const hasData = !!title || !!content || !!preacher || !!selectedCover
   const catsChanged = JSON.stringify(categoryIds.sort()) !== JSON.stringify(origCategoryIds.sort())
   const tagsChanged = JSON.stringify(tagIds.sort()) !== JSON.stringify(origTagIds.sort())
   const isDirty = hasData && !!(
     title !== sermon?.title || content !== (sermon.plain_text || '') ||
-    catsChanged || tagsChanged ||
+    catsChanged || tagsChanged || coverChanged ||
     selectedFont.id !== origFont || textColor !== origTextColor ||
     (highlightColor || null) !== origHighlight
   )
@@ -87,6 +98,12 @@ export default function EditSermonScreen() {
     } else {
       router.back()
     }
+  }
+
+  // Reset image error when cover changes
+  function handleCoverSelect(cover: Cover | null) {
+    setCoverImgError(false)
+    setSelectedCover(cover)
   }
 
   // Intercept hardware back button on Android
@@ -110,6 +127,7 @@ export default function EditSermonScreen() {
         content: { type: 'doc', content: [], font: selectedFont.id, textColor, highlightColor: highlightColor || undefined },
         plain_text: content,
         preacher: preacher.trim() || null,
+        cover_id: selectedCover?.id ?? null,
       }
       // Only pass category/tag updates if user has interacted with the pickers
       if (categoryIds.length > 0) data.category_ids = categoryIds
@@ -147,15 +165,21 @@ export default function EditSermonScreen() {
           onPress={() => setShowCovers(true)}
           activeOpacity={0.7}
         >
-          {selectedCover ? (
-            <View style={styles.coverPreview}>
-              <Image size={32} color={colors.accent.primary} />
-              <Text style={[styles.coverLabel, { color: colors.text.secondary }]}>Capa selecionada</Text>
-              <Text style={[styles.coverChange, { color: colors.accent.primary }]}>Tocar para alterar</Text>
-            </View>
+          {selectedCover?.url && !coverImgError ? (
+            <RNImage
+              source={{ uri: selectedCover.url }}
+              style={styles.coverImage}
+              resizeMode="cover"
+              onError={(e) => {
+                console.warn('[EditSermon] Cover image load error:', selectedCover.url, e.nativeEvent?.error)
+                setCoverImgError(true)
+              }}
+            />
+          ) : selectedCover ? (
+            <View style={[styles.coverImage, { backgroundColor: getBuiltinCoverColor(selectedCover.id) || colors.skeleton }]} />
           ) : (
-            <View style={styles.coverPlaceholder}>
-              <Image size={28} color={colors.text.tertiary} />
+            <View style={styles.coverEmpty}>
+              <ImageIcon size={28} color={colors.text.tertiary} />
               <Text style={[styles.coverPlaceholderText, { color: colors.text.tertiary }]}>Adicionar capa</Text>
             </View>
           )}
@@ -212,7 +236,7 @@ export default function EditSermonScreen() {
         />
       </ScrollView>
 
-      <CoverPicker visible={showCovers} onClose={() => setShowCovers(false)} selectedCover={selectedCover} onSelect={setSelectedCover} />
+      <CoverPicker visible={showCovers} onClose={() => setShowCovers(false)} selectedCover={selectedCover} onSelect={handleCoverSelect} />
       <FontSelector visible={showFonts} onClose={() => setShowFonts(false)} selectedId={selectedFont.id} onSelect={setSelectedFont} />
       <ColorPicker visible={showColors} onClose={() => setShowColors(false)} selectedColor={colorMode === 'text' ? textColor : (highlightColor ?? '')} onSelect={handleColorSelect} mode={colorMode} />
       <CategoryPicker visible={showCategories} onClose={() => setShowCategories(false)} selectedIds={categoryIds} onSelect={(id) => setCategoryIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])} />
@@ -242,6 +266,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     minHeight: 120,
   },
+  coverImage: { width: '100%', height: 120 },
   coverPreview: {
     flex: 1,
     alignItems: 'center',
@@ -250,8 +275,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   coverLabel: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
-  coverChange: { fontSize: typography.fontSize.sm },
-  coverPlaceholder: {
+  coverEmpty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',

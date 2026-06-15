@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ScrollView, TextInput, BackHandler } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ScrollView, TextInput, BackHandler, Image as RNImage } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
 import { useTheme } from '../../shared/hooks/useTheme'
@@ -12,9 +12,10 @@ import { CoverPicker } from '../../features/covers/components/CoverPicker'
 import { FontSelector, getDefaultFont } from '../../features/editor/components/FontSelector'
 import { ColorPicker } from '../../features/editor/components/ColorPicker'
 import { useCreateSermon, useSermonLimit } from '../../features/sermons/hooks/useSermons'
-import { Image, Type, Palette, Highlighter } from 'lucide-react-native'
+import { Image as ImageIcon, Type, Palette, Highlighter } from 'lucide-react-native'
 import type { Cover } from '../../shared/types'
 import type { FontOption } from '../../features/editor/components/FontSelector'
+import { getBuiltinCoverColor } from '../../features/covers/constants'
 
 export default function CreateSermonScreen() {
   const { colors } = useTheme()
@@ -36,6 +37,13 @@ export default function CreateSermonScreen() {
   const [showColors, setShowColors] = useState(false)
   const [colorMode, setColorMode] = useState<'text' | 'highlight'>('text')
   const [showCovers, setShowCovers] = useState(false)
+  const [coverImgError, setCoverImgError] = useState(false)
+
+  // Reset image error when cover changes
+  const handleCoverSelect = useCallback((cover: Cover | null) => {
+    setCoverImgError(false)
+    setSelectedCover(cover)
+  }, [])
 
   const isDirty = !!title || !!content || !!preacher || !!selectedCover || categoryIds.length > 0 || tagIds.length > 0 || selectedFont.id !== getDefaultFont().id || textColor !== '#2C2420' || !!highlightColor
 
@@ -121,15 +129,21 @@ export default function CreateSermonScreen() {
           onPress={() => setShowCovers(true)}
           activeOpacity={0.7}
         >
-          {selectedCover ? (
-            <View style={styles.coverPreview}>
-              <Image size={32} color={colors.accent.primary} />
-              <Text style={[styles.coverLabel, { color: colors.text.secondary }]}>Capa selecionada</Text>
-              <Text style={[styles.coverChange, { color: colors.accent.primary }]}>Tocar para alterar</Text>
-            </View>
+          {selectedCover?.url && !coverImgError ? (
+            <RNImage
+              source={{ uri: selectedCover.url }}
+              style={styles.coverImage}
+              resizeMode="cover"
+              onError={(e) => {
+                console.warn('[CreateSermon] Cover image load error:', selectedCover.url, e.nativeEvent?.error)
+                setCoverImgError(true)
+              }}
+            />
+          ) : selectedCover ? (
+            <View style={[styles.coverImage, { backgroundColor: getBuiltinCoverColor(selectedCover.id) || colors.skeleton }]} />
           ) : (
-            <View style={styles.coverPlaceholder}>
-              <Image size={28} color={colors.text.tertiary} />
+            <View style={styles.coverEmpty}>
+              <ImageIcon size={28} color={colors.text.tertiary} />
               <Text style={[styles.coverPlaceholderText, { color: colors.text.tertiary }]}>Adicionar capa</Text>
             </View>
           )}
@@ -186,7 +200,7 @@ export default function CreateSermonScreen() {
         />
       </ScrollView>
 
-      <CoverPicker visible={showCovers} onClose={() => setShowCovers(false)} selectedCover={selectedCover} onSelect={setSelectedCover} />
+      <CoverPicker visible={showCovers} onClose={() => setShowCovers(false)} selectedCover={selectedCover} onSelect={handleCoverSelect} />
       <FontSelector visible={showFonts} onClose={() => setShowFonts(false)} selectedId={selectedFont.id} onSelect={setSelectedFont} />
       <ColorPicker visible={showColors} onClose={() => setShowColors(false)} selectedColor={colorMode === 'text' ? textColor : (highlightColor ?? '')} onSelect={handleColorSelect} mode={colorMode} />
       <CategoryPicker visible={showCategories} onClose={() => setShowCategories(false)} selectedIds={categoryIds} onSelect={(id) => setCategoryIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])} />
@@ -217,6 +231,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     minHeight: 120,
   },
+  coverImage: { width: '100%', height: 120 },
   coverPreview: {
     flex: 1,
     alignItems: 'center',
@@ -225,8 +240,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   coverLabel: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
-  coverChange: { fontSize: typography.fontSize.sm },
-  coverPlaceholder: {
+  coverEmpty: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',

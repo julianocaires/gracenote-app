@@ -1,10 +1,14 @@
 import { supabase } from '../../../shared/services/supabase'
+import { coversService } from '../../../features/covers/services/covers.service'
 import type { Sermon, SermonCreate, SermonUpdate, SermonLimitInfo } from '../../../shared/types'
+
 export const sermonsService = {
   getAll: async (userId: string) => {
-    const { data, error } = await supabase.from('sermons').select('*').eq('user_id', userId).eq('archived', false).order('created_at', { ascending: false })
-    if (error) throw error; return data as unknown as Sermon[]
+    const { data, error } = await supabase.from('sermons').select(`*, cover:covers(id, url, is_premium)`).eq('user_id', userId).eq('archived', false).order('created_at', { ascending: false })
+    if (error) throw error
+    return coversService.ensureSignedUrls(data as unknown as Sermon[])
   },
+
   create: async (userId: string, s: SermonCreate) => {
     const { data: countData } = await supabase.from('sermons').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('archived', false)
     const count = countData?.length ?? 0
@@ -36,6 +40,7 @@ export const sermonsService = {
     }
     return data as Sermon
   },
+
   update: async (id: string, u: SermonUpdate) => {
     // Separate sermon fields from junction fields (categories/tags are NOT columns on sermons table)
     const { category_ids, tag_ids, ...sermonFields } = u
@@ -59,41 +64,53 @@ export const sermonsService = {
     }
     return data as Sermon
   },
+
   getById: async (id: string) => {
     const { data, error } = await supabase
       .from('sermons')
       .select(`
         *,
         categories:sermon_categories(category:categories(id, name, color)),
-        tags:sermon_tags(tag:tags(id, name))
+        tags:sermon_tags(tag:tags(id, name)),
+        cover:covers(id, url, is_premium)
       `)
       .eq('id', id).single()
     if (error) throw error
-    return data as unknown as Sermon
+    const [signed] = await coversService.ensureSignedUrls([data as unknown as Sermon])
+    return signed
   },
+
   delete: async (id: string) => { const { error } = await supabase.from('sermons').delete().eq('id', id); if (error) throw error },
+
   getRecent: async (userId: string, limit = 5) => {
-    const { data, error } = await supabase.from('sermons').select('*').eq('user_id', userId).eq('archived', false).order('created_at', { ascending: false }).limit(limit)
-    if (error) throw error; return data as unknown as Sermon[]
+    const { data, error } = await supabase.from('sermons').select(`*, cover:covers(id, url, is_premium)`).eq('user_id', userId).eq('archived', false).order('created_at', { ascending: false }).limit(limit)
+    if (error) throw error
+    return coversService.ensureSignedUrls(data as unknown as Sermon[])
   },
+
   getContinueReading: async (userId: string) => {
-    const { data, error } = await supabase.from('sermons').select('*').eq('user_id', userId).eq('archived', false).order('updated_at', { ascending: false }).limit(1)
-    if (error) throw error; return (data as unknown as Sermon[])[0] ?? null
+    const { data, error } = await supabase.from('sermons').select(`*, cover:covers(id, url, is_premium)`).eq('user_id', userId).eq('archived', false).order('updated_at', { ascending: false }).limit(1)
+    if (error) throw error
+    const [signed] = await coversService.ensureSignedUrls(data as unknown as Sermon[])
+    return signed ?? null
   },
+
   getOnThisDay: async (userId: string) => {
     const now = new Date(); const month = now.getMonth() + 1; const day = now.getDate()
-    const { data, error } = await supabase.from('sermons').select('*').eq('user_id', userId).eq('archived', false)
+    const { data, error } = await supabase.from('sermons').select(`*, cover:covers(id, url, is_premium)`).eq('user_id', userId).eq('archived', false)
     if (error) throw error
-    const sermons = data as unknown as Sermon[]
-    return sermons.filter((s) => {
+    const signed = await coversService.ensureSignedUrls(data as unknown as Sermon[])
+    return signed.filter((s) => {
       const d = new Date(s.created_at)
       return d.getMonth() + 1 === month && d.getDate() === day && d.getFullYear() < now.getFullYear()
     }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
   },
+
   markAsOpened: async (id: string) => {
     const { error } = await supabase.from('sermons').update({ last_opened_at: new Date().toISOString() }).eq('id', id)
     if (error) throw error
   },
+
   getLimitInfo: async (userId: string): Promise<SermonLimitInfo> => {
     const { data: active } = await supabase.from('sermons').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('archived', false)
     const { data: archived } = await supabase.from('sermons').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('archived', true)
