@@ -27,12 +27,20 @@ export default function LoginScreen() {
 
   async function handleGoogle() {
     setSocialLoading('google')
-    try { await signInWithGoogle(); router.replace('/(tabs)') } catch (e) { Alert.alert('Erro', e instanceof Error ? e.message : 'Erro ao entrar com Google') } finally { setSocialLoading(null) }
+    try {
+      const result = await signInWithGoogle()
+      // Se retornou sessão, foi capturado via openAuthSessionAsync → navegar
+      if (result) router.replace('/(tabs)')
+      // Se não retornou, o callback screen vai processar o deep link
+    } catch (e) { Alert.alert('Erro', e instanceof Error ? e.message : 'Erro ao entrar com Google') } finally { setSocialLoading(null) }
   }
 
   async function handleFacebook() {
     setSocialLoading('facebook')
-    try { await signInWithFacebook(); router.replace('/(tabs)') } catch (e) { Alert.alert('Erro', e instanceof Error ? e.message : 'Erro ao entrar com Facebook') } finally { setSocialLoading(null) }
+    try {
+      const result = await signInWithFacebook()
+      if (result) router.replace('/(tabs)')
+    } catch (e) { Alert.alert('Erro', e instanceof Error ? e.message : 'Erro ao entrar com Facebook') } finally { setSocialLoading(null) }
   }
 
   return (

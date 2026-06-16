@@ -34,7 +34,7 @@ export const profileService = {
     return data
   },
 
-  updateProfile: async (userId: string, updates: { name?: string; avatar_url?: string | null; theme?: string }) => {
+  updateProfile: async (userId: string, updates: { name?: string; avatar_url?: string | null; theme?: string; notifications_enabled?: boolean }) => {
     const { data, error } = await supabase.from('profiles').update(updates).eq('user_id', userId).select().single()
     if (error) throw error
     return data

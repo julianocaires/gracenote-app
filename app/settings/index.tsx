@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert, Image } from 'react-native'
+import { useState, useEffect, useMemo } from 'react'
+import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity, Alert, Image, Linking } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
 import { router } from 'expo-router'
@@ -9,27 +9,74 @@ import { spacing, borderRadius } from '../../shared/design/spacing'
 import { Button, Input } from '../../shared/components'
 import { useAuthStore } from '../../features/auth/store/auth.store'
 import { profileService } from '../../features/profile/services/profile.service'
-import { Bell, Globe, Database, ChevronRight, Camera, User } from 'lucide-react-native'
+import { authService } from '../../features/auth/services/auth.service'
+import { useThemeStore } from '../../shared/hooks/useThemeStore'
+import { GoogleIcon, FacebookIcon } from '../../shared/components/SocialIcons'
+import { notificationsService, hasNotificationPermission } from '../../features/notifications/services/notifications.service'
+import { Bell, Globe, Database, ChevronRight, Camera, User, Link as LinkIcon, Sun, Moon, Monitor } from 'lucide-react-native'
+import type { ThemeMode } from '../../shared/hooks/useThemeStore'
 
 export default function SettingsScreen() {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const session = useAuthStore((s) => s.session)
+  const { mode, setMode } = useThemeStore()
   const [name, setName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
+  const [notificationPermissionOk, setNotificationPermissionOk] = useState(true)
   const [autoBackup, setAutoBackup] = useState(true)
 
+  const [linking, setLinking] = useState<string | null>(null)
+
   const isLoggedIn = !!session?.user?.id
+
+  const linkedProviders = useMemo(() => authService.getLinkedProviders(session), [session])
 
   useEffect(() => {
     if (!isLoggedIn) return
     profileService.getProfile(session!.user.id).then((p) => {
       setName(p.name)
       if (p.avatar_url) setAvatarUrl(p.avatar_url)
+      setNotificationsEnabled(p.notifications_enabled ?? true)
     }).catch(() => {})
+    hasNotificationPermission().then(setNotificationPermissionOk)
   }, [session])
+
+  async function handleLink(provider: 'google' | 'facebook') {
+    setLinking(provider)
+    try {
+      await authService.linkIdentity(provider)
+    } catch (err: any) {
+      Alert.alert('Erro', err?.message || `Não foi possível vincular ${provider}`)
+    } finally {
+      setLinking(null)
+    }
+  }
+
+  function handleUnlink(provider: 'google' | 'facebook') {
+    const identity = session?.user?.identities?.find((i: any) => i.provider === provider)
+    if (!identity) return
+    Alert.alert(
+      `Desvincular ${provider === 'google' ? 'Google' : 'Facebook'}`,
+      'Você poderá vincular novamente depois.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Desvincular',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await authService.unlinkIdentity(identity as any)
+            } catch (err: any) {
+              Alert.alert('Erro', err?.message || 'Não foi possível desvincular')
+            }
+          },
+        },
+      ],
+    )
+  }
 
   async function handleAvatarPick() {
     if (!session?.user.id) return
@@ -52,6 +99,38 @@ export default function SettingsScreen() {
       Alert.alert('Salvo!', 'Nome atualizado.')
     } catch { Alert.alert('Erro', 'Não foi possível salvar') } finally { setSaving(false) }
   }
+
+  async function handleNotificationToggle(v: boolean) {
+    if (v && !notificationPermissionOk) {
+      Alert.alert('Permissão necessária', 'Ative as notificações nos Ajustes do seu dispositivo.', [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Abrir Ajustes', onPress: () => Linking.openSettings() },
+      ])
+      return
+    }
+    setNotificationsEnabled(v)
+    if (session?.user.id) {
+      profileService.updateProfile(session.user.id, { notifications_enabled: v }).catch(() => {})
+      if (v) {
+        notificationsService.scheduleAll(session.user.id)
+      } else {
+        notificationsService.cancelAll()
+      }
+    }
+  }
+
+  function handleThemeChange(newMode: ThemeMode) {
+    setMode(newMode)
+    if (session?.user.id) {
+      profileService.updateProfile(session.user.id, { theme: newMode }).catch(() => {})
+    }
+  }
+
+  const themeModes: { label: string; value: ThemeMode; icon: any }[] = [
+    { label: 'Claro', value: 'light', icon: Sun },
+    { label: 'Escuro', value: 'dark', icon: Moon },
+    { label: 'Sistema', value: 'system', icon: Monitor },
+  ]
 
   return (
     <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing['4xl'] }]}>
@@ -81,14 +160,55 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      {/* Linked accounts section — only visible when logged in */}
+      {isLoggedIn && (
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>Contas vinculadas</Text>
+          <ProviderRow
+            icon={<GoogleIcon size={20} />}
+            label="Google"
+            connected={linkedProviders.includes('google')}
+            loading={linking === 'google'}
+            onConnect={() => handleLink('google')}
+            onDisconnect={() => handleUnlink('google')}
+            colors={colors}
+          />
+          <ProviderRow
+            icon={<FacebookIcon size={20} />}
+            label="Facebook"
+            connected={linkedProviders.includes('facebook')}
+            loading={linking === 'facebook'}
+            onConnect={() => handleLink('facebook')}
+            onDisconnect={() => handleUnlink('facebook')}
+            colors={colors}
+          />
+        </View>
+      )}
+
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>Aparência</Text>
         <SettingRow icon={Globe} label="Idioma" value="Português" onPress={() => {}} colors={colors} />
+        <View style={[styles.themeRow, { borderBottomColor: colors.border }]}>
+          {themeModes.map((opt) => {
+            const active = mode === opt.value
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.themeOption, { backgroundColor: active ? colors.accent.primaryLight : colors.surface, borderColor: active ? colors.accent.primary : colors.border }]}
+                onPress={() => handleThemeChange(opt.value)}
+                activeOpacity={0.7}
+              >
+                <opt.icon size={16} color={active ? colors.accent.primary : colors.text.tertiary} />
+                <Text style={[styles.themeLabel, { color: active ? colors.accent.primary : colors.text.secondary, fontWeight: active ? typography.fontWeight.semibold : typography.fontWeight.regular }]}>{opt.label}</Text>
+              </TouchableOpacity>
+            )
+          })}
+        </View>
       </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>Notificações</Text>
-        <ToggleRow icon={Bell} label="Notificações" value={notificationsEnabled} onToggle={setNotificationsEnabled} colors={colors} />
+        <ToggleRow icon={Bell} label="Notificações" value={notificationsEnabled} onToggle={handleNotificationToggle} colors={colors} />
       </View>
 
       <View style={styles.section}>
@@ -131,6 +251,38 @@ function ToggleRow({ icon: Icon, label, value, onToggle, colors }: { icon: any; 
   )
 }
 
+function ProviderRow({ icon, label, connected, loading, onConnect, onDisconnect, colors }: {
+  icon: React.ReactNode
+  label: string
+  connected: boolean
+  loading: boolean
+  onConnect: () => void
+  onDisconnect: () => void
+  colors: any
+}) {
+  return (
+    <View style={[styles.row, { borderBottomColor: colors.border }]}>
+      <View style={styles.rowLeft}>
+        {icon}
+        <Text style={[styles.rowLabel, { color: colors.text.primary }]}>{label}</Text>
+      </View>
+      <View style={styles.rowRight}>
+        {loading ? (
+          <Text style={[styles.rowValue, { color: colors.text.tertiary }]}>Vinculando...</Text>
+        ) : connected ? (
+          <TouchableOpacity onPress={onDisconnect} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={[styles.connectedBadge, { color: colors.accent.success }]}>Conectado</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={onConnect} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={[styles.connectBtn, { color: colors.accent.primary }]}>Conectar</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  )
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: spacing.md, gap: spacing['2xl'], paddingBottom: spacing['4xl'] },
@@ -147,4 +299,9 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: typography.fontSize.base },
   rowRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   rowValue: { fontSize: typography.fontSize.sm },
+  connectedBadge: { fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium },
+  connectBtn: { fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.medium },
+  themeRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.sm },
+  themeOption: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, borderRadius: borderRadius.md, borderWidth: 1, paddingVertical: spacing.sm + 2 },
+  themeLabel: { fontSize: typography.fontSize.xs },
 })

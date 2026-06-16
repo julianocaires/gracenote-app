@@ -10,10 +10,8 @@ import { Button } from '../../shared/components'
 import { useAuthStore } from '../../features/auth/store/auth.store'
 import { profileService } from '../../features/profile/services/profile.service'
 import { authService } from '../../features/auth/services/auth.service'
-import { useThemeStore } from '../../shared/hooks/useThemeStore'
 import { useEntitlements } from '../../features/premium/hooks/useEntitlements'
 import { Crown, Settings, Shield, LogOut, ChevronRight, User } from 'lucide-react-native'
-import type { ThemeMode } from '../../shared/hooks/useThemeStore'
 
 const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0'
 
@@ -21,7 +19,6 @@ export default function ProfileScreen() {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const session = useAuthStore((s) => s.session)
-  const { mode, setMode } = useThemeStore()
   const { isPremium, expiresAt } = useEntitlements()
   const [name, setName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -39,19 +36,12 @@ export default function ProfileScreen() {
     }).catch(() => {}).finally(() => setLoading(false))
   }, [session])
 
-  async function handleThemeChange(newMode: ThemeMode) {
-    setMode(newMode)
-    if (!session?.user.id) return
-    try { await profileService.updateProfile(session.user.id, { theme: newMode }) } catch {}
+  function handleLogout() {
+    Alert.alert('Sair da conta?', 'Você precisará fazer login novamente para acessar seus dados.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Sair', style: 'destructive', onPress: () => authService.signOut() },
+    ])
   }
-
-  async function handleLogout() {
-    await authService.signOut()
-  }
-
-  const themeOptions: { label: string; value: ThemeMode }[] = [
-    { label: 'Claro', value: 'light' }, { label: 'Escuro', value: 'dark' }, { label: 'Sistema', value: 'system' },
-  ]
 
   if (loading) return <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]} />
 
@@ -86,15 +76,6 @@ export default function ProfileScreen() {
           <Button title="Já tenho conta" onPress={() => router.push('/auth/login' as any)} variant="ghost" />
         </View>
       )}
-
-      <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>Tema</Text>
-        <View style={styles.themeRow}>{themeOptions.map((opt) => (
-          <View key={opt.value} style={[styles.themeOption, { backgroundColor: mode === opt.value ? colors.accent.primaryLight : colors.surface, borderColor: mode === opt.value ? colors.accent.primary : colors.border }]}>
-            <Button title={opt.label} onPress={() => handleThemeChange(opt.value)} variant={mode === opt.value ? 'primary' : 'ghost'} />
-          </View>
-        ))}</View>
-      </View>
 
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: colors.text.secondary }]}>Aplicativo</Text>
@@ -141,8 +122,6 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: typography.fontSize.xs, fontWeight: typography.fontWeight.medium },
   section: { gap: spacing.md },
   sectionTitle: { fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold, textTransform: 'uppercase', letterSpacing: 1 },
-  themeRow: { flexDirection: 'row', gap: spacing.sm },
-  themeOption: { flex: 1, borderRadius: borderRadius.md, borderWidth: 1, overflow: 'hidden' },
   menuRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1 },
   menuLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   menuLabel: { fontSize: typography.fontSize.base },

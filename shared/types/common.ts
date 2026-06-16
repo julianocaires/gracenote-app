@@ -3,5 +3,5 @@ export interface SermonUpdate { title?: string; content?: Record<string, unknown
 export interface CategoryCreate { name: string; color?: string | null }
 export interface TagCreate { name: string }
 export interface CoverCreate { url: string; is_premium?: boolean }
-export interface ProfileUpdate { name?: string; avatar_url?: string | null; theme?: 'light' | 'dark' | 'system' }
+export interface ProfileUpdate { name?: string; avatar_url?: string | null; theme?: 'light' | 'dark' | 'system'; notifications_enabled?: boolean }
 export type SermonLimitInfo = { active: number; archived: number; total: number; canCreate: boolean }

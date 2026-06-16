@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
-import { View, StyleSheet, LogBox } from 'react-native'
+import * as WebBrowser from 'expo-web-browser'
+import * as Notifications from 'expo-notifications'
+import { View, StyleSheet, LogBox, AppState } from 'react-native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useTheme } from '../shared/hooks/useTheme'
 import { LoadingScreen } from '../shared/components'
 import { isOnboardingCompleted } from './onboarding/index'
 import { authService } from '../features/auth/services/auth.service'
 import { useAuthStore } from '../features/auth/store/auth.store'
+import { notificationsService } from '../features/notifications/services/notifications.service'
 import '../shared/i18n'
+
+// Handle any pending auth session from a previous cold start
+WebBrowser.maybeCompleteAuthSession()
 
 // Known harmless warning from react-native-screens — already documented in GRACENOTE_GUIDE.md
 LogBox.ignoreLogs([
@@ -27,6 +33,9 @@ function RootLayoutInner() {
   const [onboardingCheckDone, setOnboardingCheckDone] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
 
+  const appStateRef = useRef(AppState.currentState)
+  const userId = useAuthStore((s) => s.session?.user?.id)
+
   useEffect(() => {
     // Restore session from AsyncStorage on app startup
     authService.getSession().then((s) => {
@@ -43,6 +52,36 @@ function RootLayoutInner() {
       subscription?.subscription.unsubscribe()
     }
   }, [])
+
+  // --- Notifications ---
+  useEffect(() => {
+    if (!userId) return
+
+    notificationsService.init().then((ok) => {
+      if (ok) notificationsService.scheduleAll(userId)
+    })
+
+    // Handle notification tap — open the app
+    const tappedSub = Notifications.addNotificationResponseReceivedListener((_response) => {
+      // Just opens the app — the notification tap brings user to the dashboard
+    })
+
+    // AppState: schedule/cancel inactivity reminder based on foreground/background
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (appStateRef.current.match(/active/) && nextState.match(/inactive|background/)) {
+        notificationsService.onAppBackground()
+      } else if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        if (userId) notificationsService.onAppActive(userId)
+      }
+      appStateRef.current = nextState
+    })
+
+    return () => {
+      tappedSub.remove()
+      appStateSub.remove()
+    }
+  }, [userId])
+  // --- Fim Notificações ---
 
   useEffect(() => {
     isOnboardingCompleted().then((done) => {

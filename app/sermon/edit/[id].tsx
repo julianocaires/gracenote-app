@@ -12,8 +12,8 @@ import { TagPicker } from '../../../features/tags/components/TagPicker'
 import { CoverPicker } from '../../../features/covers/components/CoverPicker'
 import { FontSelector, getDefaultFont } from '../../../features/editor/components/FontSelector'
 import { ColorPicker } from '../../../features/editor/components/ColorPicker'
-import { useSermonDetail, useUpdateSermon } from '../../../features/sermons/hooks/useSermons'
-import { Type, Palette, Highlighter, Image as ImageIcon } from 'lucide-react-native'
+import { useSermonDetail, useUpdateSermon, useDeleteSermon } from '../../../features/sermons/hooks/useSermons'
+import { Type, Palette, Highlighter, Image as ImageIcon, Trash2 } from 'lucide-react-native'
 import type { Cover } from '../../../shared/types'
 import type { FontOption } from '../../../features/editor/components/FontSelector'
 import { getBuiltinCoverColor, isBuiltinCover } from '../../../features/covers/constants'
@@ -24,6 +24,7 @@ export default function EditSermonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { data: sermon, isLoading } = useSermonDetail(id!)
   const updateSermon = useUpdateSermon()
+  const deleteSermon = useDeleteSermon()
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [preacher, setPreacher] = useState('')
@@ -156,6 +157,15 @@ export default function EditSermonScreen() {
     }
   }
 
+  function handleDelete() {
+    Alert.alert('Excluir ministração?', `"${title || sermon?.title}" será apagada permanentemente.`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: async () => {
+        try { await deleteSermon.mutateAsync(id!); router.back() } catch { Alert.alert('Erro', 'Não foi possível excluir') }
+      }},
+    ])
+  }
+
   function handleColorSelect(color: string) {
     if (colorMode === 'text') {
       setTextColor(color)
@@ -171,7 +181,12 @@ export default function EditSermonScreen() {
       <View style={styles.header}>
         <Button title="Voltar" onPress={handleBack} variant="ghost" />
         <Text style={[styles.title, { color: colors.text.primary }]}>Editar</Text>
-        <Button title="Salvar" onPress={handleSave} loading={updateSermon.isPending} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleDelete} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.deleteBtn}>
+            <Trash2 size={18} color={colors.accent.error} />
+          </TouchableOpacity>
+          <Button title="Salvar" onPress={handleSave} loading={updateSermon.isPending} />
+        </View>
       </View>
 
       <ScrollView style={styles.scrollArea} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.scrollContent}>
@@ -272,6 +287,8 @@ function ToolBtn({ icon: Icon, onPress, colors, active }: { icon: any; onPress: 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  deleteBtn: { padding: spacing.xs },
   title: { fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.bold },
   scrollArea: { flex: 1 },
   scrollContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing['4xl'] },
