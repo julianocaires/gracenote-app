@@ -6,6 +6,7 @@ const STORAGE_KEY = '@gracenote_local_sermons'
 export interface LocalSermon {
   id: string
   title: string
+  content: string  // HTML string (new format) or JSON stringified (old format)
   plain_text: string
   preacher: string | null
   cover_id: string | null
@@ -39,12 +40,13 @@ export const localStorageService = {
     return items.find((i) => i.id === id) ?? null
   },
 
-  create: async (data: { title: string; plain_text: string; preacher?: string | null; cover_id?: string | null; font?: string; textColor?: string }): Promise<LocalSermon> => {
+  create: async (data: { title: string; content: string; plain_text: string; font?: string; preacher?: string | null; cover_id?: string | null; textColor?: string }): Promise<LocalSermon> => {
     const items = await getAllRaw()
     const now = new Date().toISOString()
     const sermon: LocalSermon = {
       id: generateId(),
       title: data.title,
+      content: data.content,
       plain_text: data.plain_text,
       preacher: data.preacher ?? null,
       cover_id: data.cover_id ?? null,
@@ -59,7 +61,7 @@ export const localStorageService = {
     return sermon
   },
 
-  update: async (id: string, data: { title?: string; plain_text?: string; preacher?: string | null; cover_id?: string | null; is_favorite?: boolean; font?: string; textColor?: string }): Promise<LocalSermon> => {
+  update: async (id: string, data: { title?: string; content?: string; plain_text?: string; font?: string; preacher?: string | null; cover_id?: string | null; is_favorite?: boolean; textColor?: string }): Promise<LocalSermon> => {
     const items = await getAllRaw()
     const idx = items.findIndex((i) => i.id === id)
     if (idx === -1) throw new Error('Ministração não encontrada')
@@ -162,7 +164,7 @@ export const localStorageService = {
       try {
         await sermonsService.create(userId, {
           title: item.title,
-          content: { type: 'doc', content: [], font: item.font, textColor: item.textColor },
+          content: item.content || { type: 'doc', content: [], font: item.font, textColor: item.textColor },
           plain_text: item.plain_text,
           preacher: item.preacher,
           cover_id: item.cover_id,

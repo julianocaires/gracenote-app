@@ -41,11 +41,12 @@ export function useCreateSermon() {
       if (online) return sermonsService.create(u!, d)
       return localStorageService.create({
         title: d.title,
+        content: typeof d.content === 'string' ? d.content : JSON.stringify(d.content),
         plain_text: d.plain_text,
+        font: d.font || (typeof d.content === 'object' ? (d.content as any)?.font : undefined),
         preacher: d.preacher,
         cover_id: d.cover_id,
-        font: (d.content as any)?.font,
-        textColor: (d.content as any)?.textColor,
+        textColor: typeof d.content === 'object' ? (d.content as any)?.textColor : undefined,
       }) as any
     },
     onSuccess: () => { q.invalidateQueries({ queryKey: ['sermons'] }); q.invalidateQueries({ queryKey: ['sermon-limit'] }); q.invalidateQueries({ queryKey: ['search'] }) },

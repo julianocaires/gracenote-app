@@ -1,8 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ScrollView, TextInput, BackHandler, Image as RNImage } from 'react-native'
+import { View, Text, StyleSheet, TouchableOpacity, KeyboardAvoidingView, Platform, Alert, ScrollView, BackHandler, Image as RNImage } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useNavigation } from 'expo-router'
 import { usePreventRemove } from '@react-navigation/native'
+import {
+  useEditorBridge,
+  TenTapStartKit,
+  defaultEditorTheme,
+  darkEditorTheme,
+} from '@10play/tentap-editor'
 import { useTheme } from '../../shared/hooks/useTheme'
 import { typography } from '../../shared/design/typography'
 import { spacing, borderRadius } from '../../shared/design/spacing'
@@ -12,19 +18,22 @@ import { TagPicker } from '../../features/tags/components/TagPicker'
 import { CoverPicker } from '../../features/covers/components/CoverPicker'
 import { FontSelector, getDefaultFont } from '../../features/editor/components/FontSelector'
 import { ColorPicker } from '../../features/editor/components/ColorPicker'
+import { RichEditor } from '../../features/editor/components/RichEditor'
+import { FormattingToolbar } from '../../features/editor/components/FormattingToolbar'
+import { TextAlignBridge } from '../../features/editor/bridges/TextAlignBridge'
+import { FontFamilyBridge } from '../../features/editor/bridges/FontFamilyBridge'
 import { useCreateSermon, useSermonLimit } from '../../features/sermons/hooks/useSermons'
-import { Image as ImageIcon, Type, Palette, Highlighter } from 'lucide-react-native'
+import { Image as ImageIcon } from 'lucide-react-native'
 import type { Cover } from '../../shared/types'
 import type { FontOption } from '../../features/editor/components/FontSelector'
 import { getBuiltinCoverColor } from '../../features/covers/constants'
 
 export default function CreateSermonScreen() {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   const insets = useSafeAreaInsets()
   const createSermon = useCreateSermon()
   const { data: limit } = useSermonLimit()
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
   const [preacher, setPreacher] = useState('')
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [tagIds, setTagIds] = useState<string[]>([])
@@ -39,14 +48,36 @@ export default function CreateSermonScreen() {
   const [colorMode, setColorMode] = useState<'text' | 'highlight'>('text')
   const [showCovers, setShowCovers] = useState(false)
   const [coverImgError, setCoverImgError] = useState(false)
+  const [contentDirty, setContentDirty] = useState(false)
+  const initialLoadRef = useRef(true)
 
-  // Reset image error when cover changes
+  const editor = useEditorBridge({
+    bridgeExtensions: [...TenTapStartKit, TextAlignBridge, FontFamilyBridge],
+    initialContent: '',
+    autofocus: false,
+    avoidIosKeyboard: false,
+    theme: {
+      ...(isDark ? darkEditorTheme : defaultEditorTheme),
+      webviewContainer: {
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: 'transparent',
+      },
+    },
+    onChange: () => {
+      if (!initialLoadRef.current) setContentDirty(true)
+    },
+  })
+
+  // Allow dirty tracking after initial load
+  useEffect(() => { initialLoadRef.current = false }, [])
+
   const handleCoverSelect = useCallback((cover: Cover | null) => {
     setCoverImgError(false)
     setSelectedCover(cover)
   }, [])
 
-  const isDirty = !!title || !!content || !!preacher || !!selectedCover || categoryIds.length > 0 || tagIds.length > 0 || selectedFont.id !== getDefaultFont().id || textColor !== '#2C2420' || !!highlightColor
+  const isDirty = !!title || contentDirty || !!preacher || !!selectedCover || categoryIds.length > 0 || tagIds.length > 0 || selectedFont.id !== getDefaultFont().id || textColor !== '#2C2420' || !!highlightColor
 
   // Prevent swipe-back gesture on iOS when there are unsaved changes
   const navigation = useNavigation()
@@ -90,24 +121,22 @@ export default function CreateSermonScreen() {
     if (!title.trim()) { Alert.alert('Título obrigatório', 'Dê um título à ministração'); return }
     savingRef.current = true
     try {
-      const result = await createSermon.mutateAsync({
+      const html = await editor.getHTML() || ''
+      const plainText = await editor.getText() || ''
+      await createSermon.mutateAsync({
         title: title.trim(),
-        content: { type: 'doc', content: [], font: selectedFont.id, textColor, highlightColor: highlightColor || undefined },
-        plain_text: content,
+        content: html,
+        plain_text: plainText,
+        font: selectedFont.id,
         preacher: preacher.trim() || null,
         cover_id: selectedCover?.id ?? null,
         category_ids: categoryIds,
         tag_ids: tagIds,
       })
-      console.log('[CreateSermon] Success:', JSON.stringify(result))
       router.back()
     } catch (err) {
       console.error('[CreateSermon] Error:', err)
-      console.error('[CreateSermon] Error constructor:', (err as any)?.constructor?.name)
-      console.error('[CreateSermon] Error keys:', Object.keys(err as object))
       const msg = (err as any)?.message || String(err)
-      const details = JSON.stringify(err, Object.getOwnPropertyNames(err as object))
-      console.error('[CreateSermon] Full details:', details)
       if (msg === 'LIMIT_REACHED') { router.push('/premium') }
       else { Alert.alert('Erro ao criar', msg) }
     }
@@ -116,8 +145,28 @@ export default function CreateSermonScreen() {
   function handleColorSelect(color: string) {
     if (colorMode === 'text') {
       setTextColor(color)
+      if (color === '#2C2420') {
+        ;(editor as any).unsetColor?.()
+      } else {
+        editor.setColor(color)
+      }
     } else {
-      setHighlightColor(color === highlightColor ? null : color)
+      const newColor = color === highlightColor ? null : color
+      setHighlightColor(newColor)
+      if (newColor) {
+        ;(editor as any).toggleHighlight?.(newColor)
+      } else {
+        ;(editor as any).unsetHighlight?.()
+      }
+    }
+  }
+
+  function handleFontSelect(font: FontOption) {
+    setSelectedFont(font)
+    if (font.id === getDefaultFont().id) {
+      ;(editor as any).unsetCustomFontFamily?.()
+    } else {
+      ;(editor as any).setCustomFontFamily?.(font.fontFamily)
     }
   }
 
@@ -165,13 +214,9 @@ export default function CreateSermonScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Title */}
         <Input value={title} onChangeText={setTitle} placeholder="Título da ministração" />
-
-        {/* Preacher */}
         <Input value={preacher} onChangeText={setPreacher} placeholder="Quem ministrou?" />
 
-        {/* Categories and Tags buttons */}
         <View style={styles.metaRow}>
           <View style={styles.metaBtnWrap}>
             <Button
@@ -189,47 +234,28 @@ export default function CreateSermonScreen() {
           </View>
         </View>
 
-        {/* Toolbar */}
-        <View style={[styles.toolbar, { borderBottomColor: colors.border, borderTopColor: colors.border }]}>
-          <ToolbarButton icon={Type} label="Fonte" onPress={() => setShowFonts(true)} colors={colors} />
-          <ToolbarButton icon={Palette} label="Cor" onPress={() => { setColorMode('text'); setShowColors(true) }} colors={colors} active={textColor !== '#2C2420'} />
-          <ToolbarButton icon={Highlighter} label="Destacar" onPress={() => { setColorMode('highlight'); setShowColors(true) }} colors={colors} active={!!highlightColor} />
-        </View>
+        {/* Rich text toolbar */}
+        <FormattingToolbar
+          editor={editor}
+          onFontPress={() => setShowFonts(true)}
+          onColorPress={(mode) => { setColorMode(mode); setShowColors(true) }}
+          activeTextColor={textColor}
+          activeHighlight={highlightColor}
+        />
 
-        {/* Editor */}
-        <TextInput
-          value={content}
-          onChangeText={setContent}
-          placeholder="Escreva sua ministração aqui..."
-          placeholderTextColor={colors.text.tertiary}
-          multiline
-          textAlignVertical="top"
-          style={[
-            styles.textInput,
-            {
-              color: textColor,
-              backgroundColor: highlightColor || colors.surface,
-              borderColor: colors.border,
-              fontFamily: selectedFont.fontFamily,
-            },
-          ]}
+        {/* Rich text editor */}
+        <RichEditor
+          editor={editor}
+          fontFamily={selectedFont.fontFamily}
         />
       </ScrollView>
 
       <CoverPicker visible={showCovers} onClose={() => setShowCovers(false)} selectedCover={selectedCover} onSelect={handleCoverSelect} />
-      <FontSelector visible={showFonts} onClose={() => setShowFonts(false)} selectedId={selectedFont.id} onSelect={setSelectedFont} />
+      <FontSelector visible={showFonts} onClose={() => setShowFonts(false)} selectedId={selectedFont.id} onSelect={handleFontSelect} />
       <ColorPicker visible={showColors} onClose={() => setShowColors(false)} selectedColor={colorMode === 'text' ? textColor : (highlightColor ?? '')} onSelect={handleColorSelect} mode={colorMode} />
       <CategoryPicker visible={showCategories} onClose={() => setShowCategories(false)} selectedIds={categoryIds} onSelect={(id) => setCategoryIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])} />
       <TagPicker visible={showTags} onClose={() => setShowTags(false)} selectedIds={tagIds} onSelect={(id) => setTagIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])} />
     </KeyboardAvoidingView>
-  )
-}
-
-function ToolbarButton({ icon: Icon, label, onPress, colors, active }: { icon: any; label: string; onPress: () => void; colors: any; active?: boolean }) {
-  return (
-    <TouchableOpacity style={styles.toolBtn} onPress={onPress}>
-      <Icon size={18} color={active ? colors.accent.primary : colors.text.secondary} />
-    </TouchableOpacity>
   )
 }
 
@@ -248,14 +274,6 @@ const styles = StyleSheet.create({
     minHeight: 120,
   },
   coverImage: { width: '100%', height: 120 },
-  coverPreview: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    padding: spacing.lg,
-  },
-  coverLabel: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
   coverEmpty: {
     flex: 1,
     alignItems: 'center',
@@ -266,23 +284,4 @@ const styles = StyleSheet.create({
   coverPlaceholderText: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
   metaRow: { flexDirection: 'row', gap: spacing.sm },
   metaBtnWrap: { flex: 1 },
-  toolbar: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    gap: spacing.xs,
-  },
-  toolBtn: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  textInput: {
-    fontSize: typography.fontSize.base,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 4,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    minHeight: 280,
-    lineHeight: 24,
-    textAlignVertical: 'top',
-  },
 })

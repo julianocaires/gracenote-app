@@ -16,9 +16,10 @@ interface SermonCardProps {
   onPress: () => void
   onFavoritePress: () => void
   onLongPress?: () => void
+  contentExcerpt?: string
 }
 
-export function SermonCard({ title, subtitle, coverUrl, coverId, isFavorite, onPress, onFavoritePress, onLongPress }: SermonCardProps) {
+export function SermonCard({ title, subtitle, coverUrl, coverId, isFavorite, onPress, onFavoritePress, onLongPress, contentExcerpt }: SermonCardProps) {
   const { colors } = useTheme()
   const [imgError, setImgError] = useState(false)
 
@@ -66,6 +67,7 @@ export function SermonCard({ title, subtitle, coverUrl, coverId, isFavorite, onP
       <View style={styles.content}>
         <Text style={[styles.title, { color: colors.text.primary }]} numberOfLines={2}>{title}</Text>
         {subtitle ? <Text style={[styles.subtitle, { color: colors.text.tertiary }]} numberOfLines={1}>{subtitle}</Text> : null}
+        {contentExcerpt ? <Text style={[styles.excerpt, { color: colors.text.tertiary }]} numberOfLines={2}>{contentExcerpt}</Text> : null}
       </View>
     </TouchableOpacity>
   )
@@ -81,4 +83,5 @@ const styles = StyleSheet.create({
   content: { padding: spacing.sm, gap: 2 },
   title: { fontSize: typography.fontSize.sm, fontWeight: typography.fontWeight.semibold },
   subtitle: { fontSize: typography.fontSize.xs },
+  excerpt: { fontSize: typography.fontSize.xs, lineHeight: typography.fontSize.xs * 1.4 },
 })

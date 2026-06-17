@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, TextInput, BackHandler, Image as RNImage } from 'react-native'
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, BackHandler, Image as RNImage } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router, useLocalSearchParams, useNavigation } from 'expo-router'
 import { usePreventRemove } from '@react-navigation/native'
+import {
+  useEditorBridge,
+  TenTapStartKit,
+  defaultEditorTheme,
+  darkEditorTheme,
+} from '@10play/tentap-editor'
 import { useTheme } from '../../../shared/hooks/useTheme'
 import { typography } from '../../../shared/design/typography'
 import { spacing, borderRadius } from '../../../shared/design/spacing'
@@ -10,23 +16,26 @@ import { Button, Input, LoadingScreen } from '../../../shared/components'
 import { CategoryPicker } from '../../../features/categories/components/CategoryPicker'
 import { TagPicker } from '../../../features/tags/components/TagPicker'
 import { CoverPicker } from '../../../features/covers/components/CoverPicker'
-import { FontSelector, getDefaultFont } from '../../../features/editor/components/FontSelector'
+import { FontSelector, getDefaultFont, FONT_OPTIONS } from '../../../features/editor/components/FontSelector'
 import { ColorPicker } from '../../../features/editor/components/ColorPicker'
+import { RichEditor } from '../../../features/editor/components/RichEditor'
+import { FormattingToolbar } from '../../../features/editor/components/FormattingToolbar'
+import { TextAlignBridge } from '../../../features/editor/bridges/TextAlignBridge'
+import { FontFamilyBridge } from '../../../features/editor/bridges/FontFamilyBridge'
 import { useSermonDetail, useUpdateSermon, useDeleteSermon } from '../../../features/sermons/hooks/useSermons'
-import { Type, Palette, Highlighter, Image as ImageIcon, Trash2 } from 'lucide-react-native'
+import { Image as ImageIcon, Trash2 } from 'lucide-react-native'
 import type { Cover } from '../../../shared/types'
 import type { FontOption } from '../../../features/editor/components/FontSelector'
 import { getBuiltinCoverColor, isBuiltinCover } from '../../../features/covers/constants'
 
 export default function EditSermonScreen() {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   const insets = useSafeAreaInsets()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { data: sermon, isLoading } = useSermonDetail(id!)
   const updateSermon = useUpdateSermon()
   const deleteSermon = useDeleteSermon()
   const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
   const [preacher, setPreacher] = useState('')
   const [categoryIds, setCategoryIds] = useState<string[]>([])
   const [tagIds, setTagIds] = useState<string[]>([])
@@ -41,19 +50,71 @@ export default function EditSermonScreen() {
   const [showFonts, setShowFonts] = useState(false)
   const [showColors, setShowColors] = useState(false)
   const [colorMode, setColorMode] = useState<'text' | 'highlight'>('text')
+  const [contentDirty, setContentDirty] = useState(false)
+  const initialLoadRef = useRef(true)
+
+  const editor = useEditorBridge({
+    bridgeExtensions: [...TenTapStartKit, TextAlignBridge, FontFamilyBridge],
+    initialContent: '',
+    autofocus: false,
+    avoidIosKeyboard: false,
+    theme: {
+      ...(isDark ? darkEditorTheme : defaultEditorTheme),
+      webviewContainer: {
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: 'transparent',
+      },
+    },
+    onChange: () => {
+      if (!initialLoadRef.current) setContentDirty(true)
+    },
+  })
 
   useEffect(() => {
     if (sermon) {
       setTitle(sermon.title)
-      setContent(sermon.plain_text || '')
       setPreacher(sermon.preacher || '')
-      const contentData = sermon.content as Record<string, any> | undefined
-      if (contentData?.font) {
-        const font = getDefaultFont()
-        setSelectedFont({ ...font, id: contentData.font })
-        setTextColor(contentData.textColor ?? '#2C2420')
-        setHighlightColor(contentData.highlightColor ?? null)
+
+      // Detect content format: new (HTML string) vs old (JSON object)
+      const contentData = sermon.content
+      // Load font from sermon record (new format) or from content JSON (old format)
+      if ((sermon as any).font) {
+        const font = FONT_OPTIONS.find(f => f.id === (sermon as any).font) || getDefaultFont()
+        setSelectedFont(font)
       }
+      if (typeof contentData === 'string') {
+        // New format: HTML string
+        setTimeout(() => {
+          editor.setContent(contentData)
+          initialLoadRef.current = false
+        }, 300)
+      } else if (contentData && typeof contentData === 'object' && (contentData as any).type === 'doc') {
+        // Old format: JSON { type: 'doc', content: [], font, textColor, highlightColor }
+        const old = contentData as Record<string, any>
+        if (old.font) {
+          const font = FONT_OPTIONS.find(f => f.id === old.font) || getDefaultFont()
+          setSelectedFont(font)
+        }
+        if (old.textColor) setTextColor(old.textColor)
+        if (old.highlightColor) setHighlightColor(old.highlightColor)
+        // Convert plain_text to simple HTML
+        const text = sermon.plain_text || ''
+        const paragraphs = text.split('\n').map((p: string) => `<p>${p || '<br>'}</p>`).join('')
+        setTimeout(() => {
+          editor.setContent(paragraphs)
+          initialLoadRef.current = false
+        }, 300)
+      } else if (sermon.plain_text) {
+        // Fallback: just plain_text
+        const text = sermon.plain_text
+        const paragraphs = text.split('\n').map((p: string) => `<p>${p || '<br>'}</p>`).join('')
+        setTimeout(() => {
+          editor.setContent(paragraphs)
+          initialLoadRef.current = false
+        }, 300)
+      }
+
       // Load existing categories and tags
       const s = sermon as any
       if (s.categories?.length) {
@@ -71,21 +132,20 @@ export default function EditSermonScreen() {
     }
   }, [sermon])
 
-  const origContent = sermon?.content as Record<string, any> | undefined
-  const origFont = origContent?.font || getDefaultFont().id
-  const origTextColor = origContent?.textColor || '#2C2420'
-  const origHighlight = origContent?.highlightColor || null
+  const origFont = (sermon as any)?.font || (sermon?.content as Record<string, any>)?.font || getDefaultFont().id
+  const oldContent = sermon?.content as Record<string, any> | undefined
+  const origTextColor = oldContent?.textColor || '#2C2420'
+  const origHighlight = oldContent?.highlightColor || null
   const s = sermon as any
   const origCategoryIds: string[] = s?.categories?.map((c: any) => c.category.id) ?? []
   const origTagIds: string[] = s?.tags?.map((t: any) => t.tag.id) ?? []
-  // Determine original cover: uploaded covers have a URL (from join), built-in only have cover_id
   const origCoverId = s?.cover?.id ?? s?.cover_id ?? null
   const coverChanged = (selectedCover?.id ?? null) !== origCoverId
-  const hasData = !!title || !!content || !!preacher || !!selectedCover
+  const hasData = !!title || !!preacher || !!selectedCover
   const catsChanged = JSON.stringify(categoryIds.sort()) !== JSON.stringify(origCategoryIds.sort())
   const tagsChanged = JSON.stringify(tagIds.sort()) !== JSON.stringify(origTagIds.sort())
-  const isDirty = hasData && !!(
-    title !== sermon?.title || content !== (sermon.plain_text || '') ||
+  const isDirty = hasData && (
+    title !== sermon?.title || contentDirty ||
     catsChanged || tagsChanged || coverChanged ||
     selectedFont.id !== origFont || textColor !== origTextColor ||
     (highlightColor || null) !== origHighlight
@@ -116,13 +176,11 @@ export default function EditSermonScreen() {
     }
   }
 
-  // Reset image error when cover changes
   function handleCoverSelect(cover: Cover | null) {
     setCoverImgError(false)
     setSelectedCover(cover)
   }
 
-  // Intercept hardware back button on Android
   useEffect(() => {
     const onBackPress = () => {
       if (isDirty) {
@@ -139,14 +197,16 @@ export default function EditSermonScreen() {
     if (!title.trim()) { Alert.alert('Título obrigatório', 'Dê um título'); return }
     savingRef.current = true
     try {
+      const html = await editor.getHTML() || ''
+      const plainText = await editor.getText() || ''
       const data: Record<string, any> = {
         title: title.trim(),
-        content: { type: 'doc', content: [], font: selectedFont.id, textColor, highlightColor: highlightColor || undefined },
-        plain_text: content,
+        content: html,
+        plain_text: plainText,
+        font: selectedFont.id,
         preacher: preacher.trim() || null,
         cover_id: selectedCover?.id ?? null,
       }
-      // Only pass category/tag updates if user has interacted with the pickers
       if (categoryIds.length > 0) data.category_ids = categoryIds
       if (tagIds.length > 0) data.tag_ids = tagIds
       await updateSermon.mutateAsync({ id: id!, data: data as any })
@@ -169,8 +229,28 @@ export default function EditSermonScreen() {
   function handleColorSelect(color: string) {
     if (colorMode === 'text') {
       setTextColor(color)
+      if (color === '#2C2420') {
+        ;(editor as any).unsetColor?.()
+      } else {
+        editor.setColor(color)
+      }
     } else {
-      setHighlightColor(color === highlightColor ? null : color)
+      const newColor = color === highlightColor ? null : color
+      setHighlightColor(newColor)
+      if (newColor) {
+        ;(editor as any).toggleHighlight?.(newColor)
+      } else {
+        ;(editor as any).unsetHighlight?.()
+      }
+    }
+  }
+
+  function handleFontSelect(font: FontOption) {
+    setSelectedFont(font)
+    if (font.id === getDefaultFont().id) {
+      ;(editor as any).unsetCustomFontFamily?.()
+    } else {
+      ;(editor as any).setCustomFontFamily?.(font.fontFamily)
     }
   }
 
@@ -216,13 +296,9 @@ export default function EditSermonScreen() {
           )}
         </TouchableOpacity>
 
-        {/* Title */}
         <Input value={title} onChangeText={setTitle} placeholder="Título" />
-
-        {/* Preacher */}
         <Input value={preacher} onChangeText={setPreacher} placeholder="Quem ministrou?" />
 
-        {/* Categories and Tags */}
         <View style={styles.metaRow}>
           <View style={styles.metaBtnWrap}>
             <Button
@@ -240,47 +316,28 @@ export default function EditSermonScreen() {
           </View>
         </View>
 
-        {/* Toolbar */}
-        <View style={[styles.toolbar, { borderBottomColor: colors.border, borderTopColor: colors.border }]}>
-          <ToolBtn icon={Type} onPress={() => setShowFonts(true)} colors={colors} />
-          <ToolBtn icon={Palette} onPress={() => { setColorMode('text'); setShowColors(true) }} colors={colors} active={textColor !== '#2C2420'} />
-          <ToolBtn icon={Highlighter} onPress={() => { setColorMode('highlight'); setShowColors(true) }} colors={colors} active={!!highlightColor} />
-        </View>
+        {/* Rich text toolbar */}
+        <FormattingToolbar
+          editor={editor}
+          onFontPress={() => setShowFonts(true)}
+          onColorPress={(mode) => { setColorMode(mode); setShowColors(true) }}
+          activeTextColor={textColor}
+          activeHighlight={highlightColor}
+        />
 
-        {/* Editor */}
-        <TextInput
-          value={content}
-          onChangeText={setContent}
-          placeholder="Conteúdo..."
-          placeholderTextColor={colors.text.tertiary}
-          multiline
-          textAlignVertical="top"
-          style={[
-            styles.textInput,
-            {
-              color: textColor,
-              backgroundColor: highlightColor || colors.surface,
-              borderColor: colors.border,
-              fontFamily: selectedFont.fontFamily,
-            },
-          ]}
+        {/* Rich text editor */}
+        <RichEditor
+          editor={editor}
+          fontFamily={selectedFont.fontFamily}
         />
       </ScrollView>
 
       <CoverPicker visible={showCovers} onClose={() => setShowCovers(false)} selectedCover={selectedCover} onSelect={handleCoverSelect} />
-      <FontSelector visible={showFonts} onClose={() => setShowFonts(false)} selectedId={selectedFont.id} onSelect={setSelectedFont} />
+      <FontSelector visible={showFonts} onClose={() => setShowFonts(false)} selectedId={selectedFont.id} onSelect={handleFontSelect} />
       <ColorPicker visible={showColors} onClose={() => setShowColors(false)} selectedColor={colorMode === 'text' ? textColor : (highlightColor ?? '')} onSelect={handleColorSelect} mode={colorMode} />
       <CategoryPicker visible={showCategories} onClose={() => setShowCategories(false)} selectedIds={categoryIds} onSelect={(id) => setCategoryIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])} />
       <TagPicker visible={showTags} onClose={() => setShowTags(false)} selectedIds={tagIds} onSelect={(id) => setTagIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id])} />
     </KeyboardAvoidingView>
-  )
-}
-
-function ToolBtn({ icon: Icon, onPress, colors, active }: { icon: any; onPress: () => void; colors: any; active?: boolean }) {
-  return (
-    <TouchableOpacity style={styles.toolBtn} onPress={onPress}>
-      <Icon size={18} color={active ? colors.accent.primary : colors.text.secondary} />
-    </TouchableOpacity>
   )
 }
 
@@ -300,14 +357,6 @@ const styles = StyleSheet.create({
     minHeight: 120,
   },
   coverImage: { width: '100%', height: 120 },
-  coverPreview: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xs,
-    padding: spacing.lg,
-  },
-  coverLabel: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
   coverEmpty: {
     flex: 1,
     alignItems: 'center',
@@ -318,23 +367,4 @@ const styles = StyleSheet.create({
   coverPlaceholderText: { fontSize: typography.fontSize.base, fontWeight: typography.fontWeight.medium },
   metaRow: { flexDirection: 'row', gap: spacing.sm },
   metaBtnWrap: { flex: 1 },
-  toolbar: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    gap: spacing.xs,
-  },
-  toolBtn: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  textInput: {
-    fontSize: typography.fontSize.base,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 4,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    minHeight: 280,
-    lineHeight: 24,
-    textAlignVertical: 'top',
-  },
 })

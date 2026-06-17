@@ -8,6 +8,7 @@ import { View, StyleSheet, LogBox, AppState } from 'react-native'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useTheme } from '../shared/hooks/useTheme'
 import { LoadingScreen } from '../shared/components'
+import { useLoadFonts } from '../shared/hooks/useLoadFonts'
 import { isOnboardingCompleted } from './onboarding/index'
 import { authService } from '../features/auth/services/auth.service'
 import { useAuthStore } from '../features/auth/store/auth.store'
@@ -32,6 +33,7 @@ function RootLayoutInner() {
   const setLoading = useAuthStore((s) => s.setLoading)
   const [onboardingCheckDone, setOnboardingCheckDone] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const [fontsLoaded] = useLoadFonts()
 
   const appStateRef = useRef(AppState.currentState)
   const userId = useAuthStore((s) => s.session?.user?.id)
@@ -99,7 +101,7 @@ function RootLayoutInner() {
     }
   }, [onboardingCheckDone, needsOnboarding])
 
-  if (!onboardingCheckDone) {
+  if (!fontsLoaded || !onboardingCheckDone) {
     return <View style={[styles.root, { backgroundColor: colors.background }]}><StatusBar style={isDark ? 'light' : 'dark'} /><LoadingScreen message="Carregando..." /></View>
   }
 
