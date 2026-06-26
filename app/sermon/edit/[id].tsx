@@ -52,6 +52,7 @@ export default function EditSermonScreen() {
   const [colorMode, setColorMode] = useState<'text' | 'highlight'>('text')
   const [contentDirty, setContentDirty] = useState(false)
   const initialLoadRef = useRef(true)
+  const contentLoadedRef = useRef(false)
 
   const editor = useEditorBridge({
     bridgeExtensions: [...TenTapStartKit, TextAlignBridge, FontFamilyBridge],
@@ -71,8 +72,12 @@ export default function EditSermonScreen() {
     },
   })
 
+  // Load sermon data into editor when both sermon and editor are ready
   useEffect(() => {
-    if (sermon) {
+    if (!sermon || contentLoadedRef.current) return
+
+    function loadIntoEditor() {
+      contentLoadedRef.current = true
       setTitle(sermon.title)
       setPreacher(sermon.preacher || '')
 
@@ -85,10 +90,8 @@ export default function EditSermonScreen() {
       }
       if (typeof contentData === 'string') {
         // New format: HTML string
-        setTimeout(() => {
-          editor.setContent(contentData)
-          initialLoadRef.current = false
-        }, 300)
+        editor.setContent(contentData)
+        initialLoadRef.current = false
       } else if (contentData && typeof contentData === 'object' && (contentData as any).type === 'doc') {
         // Old format: JSON { type: 'doc', content: [], font, textColor, highlightColor }
         const old = contentData as Record<string, any>
@@ -101,18 +104,14 @@ export default function EditSermonScreen() {
         // Convert plain_text to simple HTML
         const text = sermon.plain_text || ''
         const paragraphs = text.split('\n').map((p: string) => `<p>${p || '<br>'}</p>`).join('')
-        setTimeout(() => {
-          editor.setContent(paragraphs)
-          initialLoadRef.current = false
-        }, 300)
+        editor.setContent(paragraphs)
+        initialLoadRef.current = false
       } else if (sermon.plain_text) {
         // Fallback: just plain_text
         const text = sermon.plain_text
         const paragraphs = text.split('\n').map((p: string) => `<p>${p || '<br>'}</p>`).join('')
-        setTimeout(() => {
-          editor.setContent(paragraphs)
-          initialLoadRef.current = false
-        }, 300)
+        editor.setContent(paragraphs)
+        initialLoadRef.current = false
       }
 
       // Load existing categories and tags
@@ -129,6 +128,31 @@ export default function EditSermonScreen() {
       } else if (isBuiltinCover(s.cover_id)) {
         setSelectedCover({ id: s.cover_id, url: '', is_premium: false, is_builtin: true, user_id: null, created_at: '' })
       }
+    }
+
+    // If editor is already ready, load immediately
+    if (editor.getEditorState()?.isReady) {
+      loadIntoEditor()
+      return
+    }
+
+    // Otherwise wait for editor readiness signal via subscription
+    const unsub = editor._subscribeToEditorStateUpdate?.(() => {
+      if (editor.getEditorState()?.isReady) {
+        unsub?.()
+        loadIntoEditor()
+      }
+    })
+
+    // Fallback: load after 5s even if isReady never fires
+    const timeout = setTimeout(() => {
+      unsub?.()
+      loadIntoEditor()
+    }, 5000)
+
+    return () => {
+      unsub?.()
+      clearTimeout(timeout)
     }
   }, [sermon])
 

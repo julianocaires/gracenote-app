@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { StyleSheet, View } from 'react-native'
 import {
   RichText,
@@ -6,6 +6,7 @@ import {
 } from '@10play/tentap-editor'
 import { useTheme } from '../../../shared/hooks/useTheme'
 import { borderRadius } from '../../../shared/design/spacing'
+import { EditorLoadingOverlay } from './EditorLoadingOverlay'
 
 interface RichEditorProps {
   editor: EditorBridge
@@ -18,26 +19,47 @@ interface RichEditorProps {
  *
  * The EditorBridge instance is created by the parent screen and passed as a prop,
  * so both the toolbar and the editor share the same bridge without ref issues.
+ *
+ * Font-family is injected ONCE as default; per-selection font changes are handled
+ * by the FontFamilyBridge (TipTap textStyle mark) — NOT by re-injecting CSS.
  */
 export function RichEditor({
   editor,
-  fontFamily,
+  fontFamily: _fontFamily,
   placeholder = 'Escreva sua ministração aqui...',
 }: RichEditorProps) {
   const { isDark } = useTheme()
+  const cssInjectedRef = useRef(false)
 
-  // Inject font CSS when fontFamily or theme changes
+  // Inject editor CSS on mount (one-time). Font-family here is the FALLBACK default
+  // for unstyled text. Per-selection font changes come from TipTap marks (inline styles)
+  // which override this class-level declaration.
   useEffect(() => {
-    const family = fontFamily || 'Inter'
+    if (cssInjectedRef.current) return
+    cssInjectedRef.current = true
+
     const textColor = isDark ? '#E5E5E5' : '#2C2420'
     const placeholderColor = isDark ? '#666' : '#999'
     const blockquoteBorder = isDark ? '#555' : '#ccc'
     const blockquoteColor = isDark ? '#999' : '#666'
 
+    // Inject Google Fonts <link> after WebView loads (document.head is available)
+    if (editor.webviewRef?.current) {
+      editor.webviewRef.current.injectJavaScript(`
+        if (document.head) {
+          var fontLink = document.createElement('link');
+          fontLink.rel = 'stylesheet';
+          fontLink.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap';
+          document.head.appendChild(fontLink);
+        }
+        true;
+      `);
+    }
+
     const css = `
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap');
+              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap');
       .ProseMirror {
-        font-family: '${family}', sans-serif;
+        font-family: 'Inter', sans-serif;
         font-size: 16px;
         line-height: 1.6;
         padding: 12px;
@@ -62,11 +84,12 @@ export function RichEditor({
       }
     `
     editor.injectCSS(css)
-  }, [fontFamily, isDark, placeholder])
+  }, [editor, isDark])
 
   return (
     <View style={styles.container}>
       <RichText editor={editor} style={styles.webview} />
+      <EditorLoadingOverlay editor={editor} />
     </View>
   )
 }
@@ -76,6 +99,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     overflow: 'hidden',
     minHeight: 300,
+    position: 'relative',
   },
   webview: {
     flex: 1,

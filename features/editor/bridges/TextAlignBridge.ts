@@ -34,13 +34,14 @@ export const TextAlignBridge = new BridgeExtension<
   },
 
   extendEditorInstance: (sendBridgeMessage) => ({
-    setCustomTextAlign: (alignment) => {
+    setCustomTextAlign: (alignment: 'left' | 'center' | 'right') => {
       sendBridgeMessage({ type: 'setTextAlign', payload: alignment })
     },
   }),
 
   extendEditorState: (editor) => {
-    const attrs = editor.getAttributes('textAlign')
+    const attrs = editor.getAttributes('paragraph')
     return { activeCustomTextAlign: attrs.textAlign || undefined }
   },
+
 })

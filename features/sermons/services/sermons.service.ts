@@ -14,7 +14,7 @@ export const sermonsService = {
     const count = countData?.length ?? 0
     const { data: premium } = await supabase.from('subscriptions').select('id').eq('user_id', userId).eq('is_active', true).maybeSingle()
     if (!premium && count >= 100) throw new Error('LIMIT_REACHED')
-    const { data, error } = await supabase.from('sermons').insert({ user_id: userId, title: s.title, content: s.content, plain_text: s.plain_text, preacher: s.preacher ?? null, cover_id: s.cover_id ?? null }).select().single()
+    const { data, error } = await supabase.from('sermons').insert({ user_id: userId, title: s.title, content: s.content, plain_text: s.plain_text, font: s.font ?? null, preacher: s.preacher ?? null, cover_id: s.cover_id ?? null }).select().single()
     if (error) throw error
     // Link categories
     if (s.category_ids?.length) {

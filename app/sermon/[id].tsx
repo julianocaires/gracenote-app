@@ -48,7 +48,7 @@ function buildContentHtml(sermon: any, isDark: boolean): string {
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: '${fontFamily}', sans-serif; font-size: 17px; color: ${textColor}; background: ${bgColor}; padding: 8px; line-height: 1.7; }
+  body { font-family: 'Inter', sans-serif; font-size: 17px; color: ${textColor}; background: ${bgColor}; padding: 8px; line-height: 1.7; }
   p { margin: 0 0 0.75em; }
   h1 { font-size: 1.5em; margin: 1em 0 0.5em; }
   h2 { font-size: 1.3em; margin: 0.8em 0 0.4em; }
@@ -75,8 +75,17 @@ function buildContentHtml(sermon: any, isDark: boolean): string {
 
 const INJECTED_HEIGHT_SCRIPT = `
 setTimeout(() => {
+  /* Re-apply inline styles from HTML attributes.
+     Some WebViews lose inline styles when loaded via source={{ html }}. */
+  document.querySelectorAll('[style]').forEach(function(el) {
+    var raw = el.getAttribute('style') || '';
+    var ta = raw.match(/text-align\\s*:\\s*(left|center|right)/i);
+    if (ta) { el.style.setProperty('text-align', ta[1], 'important'); }
+    var ff = raw.match(/font-family\\s*:\\s*([^;"]+)/i);
+    if (ff) { el.style.setProperty('font-family', ff[1].trim(), 'important'); }
+  });
   window.ReactNativeWebView.postMessage(JSON.stringify(document.body.scrollHeight));
-}, 100);
+}, 150);
 `
 
 export default function SermonDetailScreen() {
@@ -159,7 +168,7 @@ export default function SermonDetailScreen() {
       <View style={[styles.contentContainer, { height: Math.max(contentHeight, 200) }]}>
         <WebView
           originWhitelist={['*']}
-          source={{ html: htmlContent }}
+          source={{ html: htmlContent, baseUrl: 'https://gracenote.app/' }}
           scrollEnabled={false}
           style={[styles.contentWebView, { backgroundColor: 'transparent' }]}
           onMessage={(e) => {

@@ -65,7 +65,7 @@ export function useUpdateSermon() {
         preacher: data.preacher as string | null,
         cover_id: data.cover_id as string | null,
         is_favorite: data.is_favorite as boolean,
-        font: (data.content as any)?.font,
+        font: data.font,
         textColor: (data.content as any)?.textColor,
       }) as any
     },

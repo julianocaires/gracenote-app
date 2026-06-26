@@ -32,7 +32,7 @@ export const FontFamilyBridge = new BridgeExtension<
   },
 
   extendEditorInstance: (sendBridgeMessage) => ({
-    setCustomFontFamily: (fontFamily) => {
+    setCustomFontFamily: (fontFamily: string) => {
       sendBridgeMessage({ type: 'setFontFamily', payload: fontFamily })
     },
     unsetCustomFontFamily: () => {
@@ -44,4 +44,5 @@ export const FontFamilyBridge = new BridgeExtension<
     const attrs = editor.getAttributes('textStyle')
     return { activeFontFamily: attrs.fontFamily || undefined }
   },
+
 })
