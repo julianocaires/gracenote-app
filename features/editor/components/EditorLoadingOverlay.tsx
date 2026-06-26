@@ -1,61 +1,73 @@
 import { useEffect, useRef, useState } from 'react'
-import { View, Animated, StyleSheet } from 'react-native'
+import { View, Animated, StyleSheet, Text } from 'react-native'
 import { useTheme } from '../../../shared/hooks/useTheme'
-import { borderRadius } from '../../../shared/design/spacing'
+import { typography } from '../../../shared/design/typography'
+import { spacing, borderRadius } from '../../../shared/design/spacing'
 import type { EditorBridge } from '@10play/tentap-editor'
 
 /**
- * A loading overlay for the editor area.
+ * Loading overlay for the rich-text editor.
  *
- * Subscribes to BridgeState updates via _subscribeToEditorStateUpdate
- * and hides once isReady is true. Falls back to a max wait of 8s.
+ * Shows a pulsing skeleton block with a progress bar underneath,
+ * matching the app's design language. Hides automatically when
+ * the editor signals isReady, or falls back after 8s.
  */
 export function EditorLoadingOverlay({ editor }: { editor: EditorBridge }) {
-  const { colors } = useTheme()
-  const [loading, setLoading] = useState(true)
+  const { colors, isDark } = useTheme()
+  const [visible, setVisible] = useState(true)
   const progressAnim = useRef(new Animated.Value(0)).current
+  const fadeAnim = useRef(new Animated.Value(1)).current
+  const pulseAnim = useRef(new Animated.Value(1)).current
   const mountedRef = useRef(true)
-  const opacityAnim = useRef(new Animated.Value(1)).current
+  const hiddenRef = useRef(false)
 
-  // Animate progress bar from 0 to 0.85 (then jump to 1 when ready)
+  // Animate progress bar from 0 → 0.9 over 6s
   useEffect(() => {
     Animated.timing(progressAnim, {
-      toValue: 0.85,
+      toValue: 0.9,
       duration: 6000,
       useNativeDriver: false,
     }).start()
   }, [progressAnim])
 
-  // Subscribe to editor state updates to detect isReady
+  // Subtle pulse animation for the skeleton block
   useEffect(() => {
-    // Timeout fallback: hide after 8s regardless
-    const timeout = setTimeout(() => {
-      if (mountedRef.current) {
-        setLoading(false)
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 200,
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.6,
+          duration: 800,
           useNativeDriver: false,
-        }).start()
-      }
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+      ]),
+    )
+    pulse.start()
+    return () => pulse.stop()
+  }, [pulseAnim])
+
+  // Subscribe to editor ready state or fallback after 8s
+  useEffect(() => {
+    mountedRef.current = true
+
+    const timeout = setTimeout(() => {
+      if (mountedRef.current) hideOverlay()
     }, 8000)
 
-    // Subscribe to bridge state changes
     if (editor.getEditorState()?.isReady) {
-      setLoading(false)
       clearTimeout(timeout)
+      hideOverlay()
       return
     }
 
     const unsub = editor._subscribeToEditorStateUpdate?.(() => {
       if (editor.getEditorState()?.isReady && mountedRef.current) {
-        setLoading(false)
         clearTimeout(timeout)
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: false,
-        }).start()
+        hideOverlay()
       }
     })
 
@@ -64,36 +76,74 @@ export function EditorLoadingOverlay({ editor }: { editor: EditorBridge }) {
       clearTimeout(timeout)
       unsub?.()
     }
-  }, [editor, progressAnim, opacityAnim])
+  }, [editor])
 
-  if (!loading) return null
+  function hideOverlay() {
+    if (hiddenRef.current) return
+    hiddenRef.current = true
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 250,
+      useNativeDriver: false,
+    }).start(() => {
+      if (mountedRef.current) setVisible(false)
+    })
+  }
 
-  const widthInterpolated = progressAnim.interpolate({
+  if (!visible) return null
+
+  const progressWidth = progressAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0%', '100%'],
   })
 
+  const bgColor = isDark ? colors.surface : colors.background
+
   return (
     <Animated.View
-      style={[
-        styles.wrapper,
-        {
-          backgroundColor: colors.overlay,
-          opacity: opacityAnim,
-        },
-      ]}
-      pointerEvents="none"
+      style={[styles.wrapper, { backgroundColor: bgColor, opacity: fadeAnim }]}
+      pointerEvents="box-none"
     >
-      <View style={[styles.progressTrack, { backgroundColor: colors.skeleton }]}>
+      <View style={styles.inner}>
+        {/* Skeleton blocks simulating editor content */}
         <Animated.View
           style={[
-            styles.progressBar,
-            {
-              backgroundColor: colors.accent.primary,
-              width: widthInterpolated,
-            },
+            styles.skeletonBlock,
+            { backgroundColor: colors.skeleton, opacity: pulseAnim },
           ]}
         />
+        <Animated.View
+          style={[
+            styles.skeletonBlock,
+            styles.skeletonShort,
+            { backgroundColor: colors.skeleton, opacity: pulseAnim },
+          ]}
+        />
+        <Animated.View
+          style={[
+            styles.skeletonBlock,
+            styles.skeletonMedium,
+            { backgroundColor: colors.skeleton, opacity: pulseAnim },
+          ]}
+        />
+
+        {/* Progress bar */}
+        <View style={[styles.progressTrack, { backgroundColor: colors.borderLight }]}>
+          <Animated.View
+            style={[
+              styles.progressBar,
+              {
+                backgroundColor: colors.accent.primary,
+                width: progressWidth,
+              },
+            ]}
+          />
+        </View>
+
+        {/* Loading label */}
+        <Text style={[styles.label, { color: colors.text.tertiary }]}>
+          Carregando editor...
+        </Text>
       </View>
     </Animated.View>
   )
@@ -105,15 +155,40 @@ const styles = StyleSheet.create({
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: borderRadius.md,
+  },
+  inner: {
+    width: '75%',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  skeletonBlock: {
+    width: '100%',
+    height: 14,
+    borderRadius: borderRadius.sm,
+  },
+  skeletonShort: {
+    width: '60%',
+    alignSelf: 'flex-start',
+  },
+  skeletonMedium: {
+    width: '80%',
+    alignSelf: 'flex-start',
   },
   progressTrack: {
-    width: '60%',
+    width: '100%',
     height: 3,
     borderRadius: borderRadius.full,
     overflow: 'hidden',
+    marginTop: spacing.md,
   },
   progressBar: {
     height: '100%',
     borderRadius: borderRadius.full,
+  },
+  label: {
+    fontSize: typography.fontSize.xs,
+    fontWeight: typography.fontWeight.medium,
+    marginTop: spacing.xs,
   },
 })

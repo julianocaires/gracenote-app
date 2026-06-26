@@ -22,6 +22,9 @@ interface RichEditorProps {
  *
  * Font-family is injected ONCE as default; per-selection font changes are handled
  * by the FontFamilyBridge (TipTap textStyle mark) — NOT by re-injecting CSS.
+ *
+ * The loading overlay has a solid background, so the placeholder text
+ * is never visible during loading — no need for delayed injection.
  */
 export function RichEditor({
   editor,
@@ -53,11 +56,11 @@ export function RichEditor({
           document.head.appendChild(fontLink);
         }
         true;
-      `);
+      `)
     }
 
     const css = `
-              @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap');
       .ProseMirror {
         font-family: 'Inter', sans-serif;
         font-size: 16px;

@@ -53,6 +53,7 @@ export default function EditSermonScreen() {
   const [contentDirty, setContentDirty] = useState(false)
   const initialLoadRef = useRef(true)
   const contentLoadedRef = useRef(false)
+  const discardingRef = useRef(false)
 
   const editor = useEditorBridge({
     bridgeExtensions: [...TenTapStartKit, TextAlignBridge, FontFamilyBridge],
@@ -91,7 +92,7 @@ export default function EditSermonScreen() {
       if (typeof contentData === 'string') {
         // New format: HTML string
         editor.setContent(contentData)
-        initialLoadRef.current = false
+        setTimeout(() => { initialLoadRef.current = false }, 100)
       } else if (contentData && typeof contentData === 'object' && (contentData as any).type === 'doc') {
         // Old format: JSON { type: 'doc', content: [], font, textColor, highlightColor }
         const old = contentData as Record<string, any>
@@ -105,13 +106,13 @@ export default function EditSermonScreen() {
         const text = sermon.plain_text || ''
         const paragraphs = text.split('\n').map((p: string) => `<p>${p || '<br>'}</p>`).join('')
         editor.setContent(paragraphs)
-        initialLoadRef.current = false
+        setTimeout(() => { initialLoadRef.current = false }, 100)
       } else if (sermon.plain_text) {
         // Fallback: just plain_text
         const text = sermon.plain_text
         const paragraphs = text.split('\n').map((p: string) => `<p>${p || '<br>'}</p>`).join('')
         editor.setContent(paragraphs)
-        initialLoadRef.current = false
+        setTimeout(() => { initialLoadRef.current = false }, 100)
       }
 
       // Load existing categories and tags
@@ -178,21 +179,23 @@ export default function EditSermonScreen() {
   // Prevent swipe-back gesture on iOS when there are unsaved changes
   const navigation = useNavigation()
   const savingRef = useRef(false)
-  usePreventRemove(isDirty, ({ data }) => {
+  usePreventRemove(isDirty && !discardingRef.current, ({ data }) => {
     if (savingRef.current) {
       navigation.dispatch(data.action)
       return
     }
+    discardingRef.current = true
     Alert.alert('Descartar alterações?', 'Você tem alterações que ainda não foram salvas.', [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Cancelar', style: 'cancel', onPress: () => { discardingRef.current = false } },
       { text: 'Descartar', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
     ])
   })
 
   function handleBack() {
     if (isDirty) {
+      discardingRef.current = true
       Alert.alert('Descartar alterações?', 'Você tem alterações que ainda não foram salvas.', [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cancelar', style: 'cancel', onPress: () => { discardingRef.current = false } },
         { text: 'Descartar', style: 'destructive', onPress: () => router.back() },
       ])
     } else {

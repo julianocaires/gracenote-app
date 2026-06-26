@@ -82,21 +82,24 @@ export default function CreateSermonScreen() {
   // Prevent swipe-back gesture on iOS when there are unsaved changes
   const navigation = useNavigation()
   const savingRef = useRef(false)
-  usePreventRemove(isDirty, ({ data }) => {
+  const discardingRef = useRef(false)
+  usePreventRemove(isDirty && !discardingRef.current, ({ data }) => {
     if (savingRef.current) {
       navigation.dispatch(data.action)
       return
     }
+    discardingRef.current = true
     Alert.alert('Descartar alterações?', 'Você tem alterações que ainda não foram salvas.', [
-      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Cancelar', style: 'cancel', onPress: () => { discardingRef.current = false } },
       { text: 'Descartar', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
     ])
   })
 
   function handleBack() {
     if (isDirty) {
+      discardingRef.current = true
       Alert.alert('Descartar alterações?', 'Você tem alterações que ainda não foram salvas.', [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cancelar', style: 'cancel', onPress: () => { discardingRef.current = false } },
         { text: 'Descartar', style: 'destructive', onPress: () => router.back() },
       ])
     } else {
