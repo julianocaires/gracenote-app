@@ -11,15 +11,15 @@ export interface FontOption { id: string; name: string; fontFamily: string; isPr
 
 const FONT_OPTIONS: FontOption[] = [
   { id: 'classica', name: 'Clássica', fontFamily: 'Inter', isPremium: false },
-  { id: 'moderna', name: 'Moderna', fontFamily: 'Inter', isPremium: false },
+  { id: 'moderna', name: 'Moderna', fontFamily: 'Nunito', isPremium: false },
   { id: 'serifada', name: 'Serifada', fontFamily: 'Merriweather', isPremium: false },
-  { id: 'elegante', name: 'Elegante', fontFamily: 'Merriweather', isPremium: false },
-  { id: 'minimalista', name: 'Minimalista', fontFamily: 'Inter', isPremium: false },
+  { id: 'elegante', name: 'Elegante', fontFamily: 'Playfair Display', isPremium: false },
+  { id: 'minimalista', name: 'Minimalista', fontFamily: 'Lora', isPremium: false },
   { id: 'lettering', name: 'Lettering', fontFamily: 'Caveat', isPremium: true },
-  { id: 'manuscrita', name: 'Manuscrita', fontFamily: 'Caveat', isPremium: true },
-  { id: 'caligrafia', name: 'Caligrafia', fontFamily: 'Caveat', isPremium: true },
-  { id: 'brush', name: 'Brush', fontFamily: 'Caveat', isPremium: true },
-  { id: 'assinatura', name: 'Assinatura', fontFamily: 'Caveat', isPremium: true },
+  { id: 'manuscrita', name: 'Manuscrita', fontFamily: 'Dancing Script', isPremium: true },
+  { id: 'caligrafia', name: 'Caligrafia', fontFamily: 'Great Vibes', isPremium: true },
+  { id: 'brush', name: 'Brush', fontFamily: 'Permanent Marker', isPremium: true },
+  { id: 'assinatura', name: 'Assinatura', fontFamily: 'Pacifico', isPremium: true },
 ]
 
 interface FontSelectorProps { visible: boolean; onClose: () => void; selectedId: string; onSelect: (font: FontOption) => void }

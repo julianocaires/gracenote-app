@@ -171,7 +171,7 @@ ${exportPattern}`
 function createEsmTransform(exportStmt) {
   return (content) => {
     // IDEMPOTENCY CHECK: if all patches already applied, skip
-    if (content.includes('textAlign"||') && content.includes('googleapis.com')) {
+    if (content.includes('textAlign"||') && content.includes('Lora')) {
       return content;
     }
     // Fix yA array to include __EXTRA_BRIDGES__ (idempotent: only replaces if not already patched)
@@ -186,7 +186,7 @@ function createEsmTransform(exportStmt) {
     // Inject Google Fonts <link> into the HTML head (before </head>)
     // This ensures fonts load reliably in the WebView
     if (!content.includes('googleapis.com/css2')) {
-      content = content.replace('</head>', '<link rel=\\"stylesheet\\" href=\\"https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&display=swap\\"></head>');
+      content = content.replace('</head>', '<link rel=\\"stylesheet\\" href=\\"https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Permanent+Marker&family=Pacifico&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700&display=swap\\"></head>');
     }
     return content;
   }
