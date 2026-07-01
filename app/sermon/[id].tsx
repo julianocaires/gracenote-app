@@ -80,9 +80,9 @@ setTimeout(() => {
   document.querySelectorAll('[style]').forEach(function(el) {
     var raw = el.getAttribute('style') || '';
     var ta = raw.match(/text-align\\s*:\\s*(left|center|right)/i);
-    if (ta) { el.style.setProperty('text-align', ta[1], 'important'); }
-    var ff = raw.match(/font-family\\s*:\\s*([^;"]+)/i);
-    if (ff) { el.style.setProperty('font-family', ff[1].trim(), 'important'); }
+    if (ta) { el.style.textAlign = ta[1]; }
+    var ff = raw.match(/font-family\\s*:\\s*['\"]?([^;'\"]+)['\"]?/i);
+    if (ff) { el.style.fontFamily = ff[1].trim(); }
   });
   window.ReactNativeWebView.postMessage(JSON.stringify(document.body.scrollHeight));
 }, 150);

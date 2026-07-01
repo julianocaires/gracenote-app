@@ -126,7 +126,7 @@ export default function CreateSermonScreen() {
     try {
       const html = await editor.getHTML() || ''
       const plainText = await editor.getText() || ''
-      await createSermon.mutateAsync({
+      const payload = {
         title: title.trim(),
         content: html,
         plain_text: plainText,
@@ -135,13 +135,29 @@ export default function CreateSermonScreen() {
         cover_id: selectedCover?.id ?? null,
         category_ids: categoryIds,
         tag_ids: tagIds,
-      })
-      router.back()
+      }
+
+      // Retry on network failure (up to 2 retries with 1s delay)
+      let lastErr: any
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await createSermon.mutateAsync(payload)
+          router.back()
+          return
+        } catch (e: any) {
+          lastErr = e
+          if (e?.message === 'LIMIT_REACHED') { router.push('/premium'); return }
+          const isNetworkError = e?.message?.includes('Network request failed') || e?.message?.includes('fetch')
+          if (!isNetworkError || attempt === 2) throw e
+          console.warn(`[CreateSermon] Retry ${attempt + 1}/2: network error, retrying...`)
+          await new Promise(r => setTimeout(r, 1000))
+        }
+      }
+      throw lastErr
     } catch (err) {
       console.error('[CreateSermon] Error:', err)
       const msg = (err as any)?.message || String(err)
-      if (msg === 'LIMIT_REACHED') { router.push('/premium') }
-      else { Alert.alert('Erro ao criar', msg) }
+      Alert.alert('Erro ao criar', msg || 'Não foi possível salvar. Verifique sua conexão e tente novamente.')
     }
   }
 

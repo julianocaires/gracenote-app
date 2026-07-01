@@ -60,7 +60,6 @@ export function RichEditor({
     }
 
     const css = `
-      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Merriweather:wght@400;700&family=Caveat:wght@400;700&family=Dancing+Script:wght@400;700&family=Great+Vibes&family=Permanent+Marker&family=Pacifico&family=Nunito:wght@400;700&family=Playfair+Display:wght@400;700&family=Lora:wght@400;700&display=swap');
       .ProseMirror {
         font-family: 'Inter', sans-serif;
         font-size: 16px;

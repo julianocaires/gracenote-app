@@ -236,11 +236,27 @@ export default function EditSermonScreen() {
       }
       if (categoryIds.length > 0) data.category_ids = categoryIds
       if (tagIds.length > 0) data.tag_ids = tagIds
-      await updateSermon.mutateAsync({ id: id!, data: data as any })
-      router.back()
-    } catch (err) {
-      console.error('[EditSermon] Error:', err)
-      Alert.alert('Erro ao salvar', (err as any)?.message || 'Não foi possível salvar')
+
+      // Retry on network failure (up to 2 retries with 1s delay)
+      let lastErr: any
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await updateSermon.mutateAsync({ id: id!, data: data as any })
+          router.back()
+          return
+        } catch (e: any) {
+          lastErr = e
+          const isNetworkError = e?.message?.includes('Network request failed') || e?.message?.includes('fetch')
+          if (!isNetworkError || attempt === 2) throw e
+          console.warn(`[EditSermon] Retry ${attempt + 1}/2: network error, retrying...`)
+          await new Promise(r => setTimeout(r, 1000))
+        }
+      }
+      throw lastErr
+    } catch (err: any) {
+      const msg = err?.message || err?.error || JSON.stringify(err) || 'Erro desconhecido'
+      console.error('[EditSermon] Error:', msg)
+      Alert.alert('Erro ao salvar', 'Não foi possível salvar. Verifique sua conexão e tente novamente.')
     }
   }
 
